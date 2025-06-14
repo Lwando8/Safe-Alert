@@ -21,7 +21,8 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "This app uses location services to provide emergency alerts and share your location with emergency contacts.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses location services to provide emergency alerts and share your location with emergency contacts even when the app is in the background.",
-        "NSLocationAlwaysUsageDescription": "This app uses location services to provide emergency alerts and share your location with emergency contacts even when the app is in the background."
+        "NSLocationAlwaysUsageDescription": "This app uses location services to provide emergency alerts and share your location with emergency contacts even when the app is in the background.",
+        "NSUserNotificationsUsageDescription": "This app sends critical emergency notifications to alert your emergency contacts when you need help."
       }
     },
     "android": {
@@ -32,7 +33,10 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION"
+        "ACCESS_BACKGROUND_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "WAKE_LOCK"
       ],
       "package": "com.lwandonova.safetyalertapp"
     },
@@ -51,7 +55,22 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#e74c3c",
+          "sounds": ["./assets/emergency-alert.wav"],
+          "mode": "production"
+        }
       ]
-    ]
+    ],
+    "notification": {
+      "icon": "./assets/icon.png",
+      "color": "#e74c3c",
+      "androidMode": "default",
+      "androidCollapsedTitle": "Emergency Alert"
+    }
   }
 }

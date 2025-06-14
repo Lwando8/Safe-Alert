@@ -11,17 +11,29 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Screen from '../../components/Screen';
 import EmergencyService from '../../services/EmergencyService';
 import AudioRecordingService from '../../services/AudioRecordingService';
+import NotificationService from '../../services/NotificationService';
 import { useHardwareButtons } from '../../services/HardwareButtonService';
+
+interface EmergencyContact {
+  id: string;
+  name: string;
+  phone: string;
+  relationship: string;
+}
 
 export default function AlertScreen() {
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [isEmergencyActive, setIsEmergencyActive] = useState(false);
   const [emergencyService] = useState(() => EmergencyService.getInstance());
   const [audioService] = useState(() => AudioRecordingService.getInstance());
+  const [notificationService] = useState(() => NotificationService.getInstance());
   const [isRecording, setIsRecording] = useState(false);
+  const [contacts, setContacts] = useState<EmergencyContact[]>([]);
+  const [notificationPermission, setNotificationPermission] = useState(false);
 
   // Hardware button integration with direct SOS support
   const { simulateEmergency, getHardwareInfo } = useHardwareButtons(
@@ -31,7 +43,84 @@ export default function AlertScreen() {
 
   useEffect(() => {
     getCurrentLocation();
+    loadEmergencyContacts();
+    checkNotificationPermission();
+    
+    // Setup notification response handler
+    notificationService.setupNotificationResponseHandler();
   }, []);
+
+  const checkNotificationPermission = () => {
+    const hasPermission = notificationService.getNotificationPermissionStatus();
+    setNotificationPermission(hasPermission);
+  };
+
+  const loadEmergencyContacts = async () => {
+    try {
+      const savedContacts = await AsyncStorage.getItem('emergencyContacts');
+      if (savedContacts) {
+        setContacts(JSON.parse(savedContacts));
+      }
+    } catch (error) {
+      console.error('Error loading emergency contacts:', error);
+    }
+  };
+
+  const sendEmergencyNotifications = async (alertType: string): Promise<number> => {
+    try {
+      if (!notificationPermission) {
+        Alert.alert(
+          'Notification Permission Required',
+          'Please enable notifications to send emergency alerts to your contacts.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Enable', 
+              onPress: () => {
+                // Re-check permissions
+                checkNotificationPermission();
+              }
+            }
+          ]
+        );
+        return 0;
+      }
+
+      const userData = await AsyncStorage.getItem('user');
+      const user = userData ? JSON.parse(userData) : null;
+      const userName = user?.fullName || 'Emergency Contact';
+
+      const locationData = location ? {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      } : undefined;
+
+      const successCount = await notificationService.sendEmergencyNotificationToContacts(
+        alertType,
+        locationData,
+        userName
+      );
+
+      return successCount;
+    } catch (error) {
+      console.error('Error sending emergency notifications:', error);
+      return 0;
+    }
+  };
+
+  const testNotificationSystem = async () => {
+    try {
+      await notificationService.testEmergencyNotification();
+      Alert.alert(
+        'Test Notification Sent',
+        'Check your notifications to see if the emergency alert system is working correctly.',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('Error testing notifications:', error);
+      Alert.alert('Error', 'Failed to send test notification');
+    }
+  };
 
   const getCurrentLocation = async () => {
     try {
@@ -99,22 +188,22 @@ export default function AlertScreen() {
         'Critical Emergency - Police Required'
       );
 
-      // Show confirmation with assigned unit details
-      Alert.alert(
-        '🚨 SOS ALERT SENT',
-        `Emergency alert dispatched!\n\nAssigned Unit: ${emergencyAlert.assignedUnit?.badge}\nOfficer: ${emergencyAlert.assignedUnit?.name}\nETA: ${emergencyAlert.assignedUnit?.eta} minutes\n\n🎙️ Audio recording active for evidence.\n\nStay safe and wait for assistance.`,
-        [{ text: 'OK' }]
-      );
+              // Show confirmation with assigned unit details and notification status
+        const notificationStatus = successCount > 0 
+          ? `\n🔔 Critical alerts sent to ${successCount} emergency contact(s)`
+          : contacts.length > 0 
+          ? '\n🔔 Emergency notifications attempted'
+          : '\n⚠️ No emergency contacts configured';
 
-      // Send critical alerts to emergency contacts
-      await emergencyService.sendEmergencyContactAlert(
-        [], // Contacts will be loaded from storage in the service
-        'SOS Police Alert',
-        {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-        }
-      );
+        Alert.alert(
+          '🚨 SOS ALERT SENT',
+          `Emergency alert dispatched!\n\nAssigned Unit: ${emergencyAlert.assignedUnit?.badge}\nOfficer: ${emergencyAlert.assignedUnit?.name}\nETA: ${emergencyAlert.assignedUnit?.eta} minutes\n\n🎙️ Audio recording active for evidence.${notificationStatus}\n\nStay safe and wait for assistance.`,
+          [{ text: 'OK' }]
+        );
+
+              // Send critical push notifications to emergency contacts
+        const successCount = await sendEmergencyNotifications('SOS Police Alert');
+        console.log(`${successCount} emergency notifications sent successfully`);
 
     } catch (error) {
       console.error('Error triggering SOS alert:', error);
@@ -159,6 +248,10 @@ export default function AlertScreen() {
                 }
               }
 
+              // Send critical push notifications to emergency contacts
+              const successCount = await sendEmergencyNotifications(emergencyTypes[type]);
+
+              // Also send through emergency service for logging
               await emergencyService.sendEmergencyContactAlert(
                 [],
                 emergencyTypes[type],
@@ -168,11 +261,11 @@ export default function AlertScreen() {
                 }
               );
 
-              const alertMessage = type === 'security' 
-                ? `Critical ${emergencyTypes[type].toLowerCase()} alert sent to your emergency contacts.\n\n🎙️ Audio recording active for evidence.`
-                : `Critical ${emergencyTypes[type].toLowerCase()} alert sent to your emergency contacts.`;
+              const notificationMessage = successCount > 0 
+                ? `${emergencyTypes[type]} critical alerts sent to ${successCount} contact(s)${type === 'security' ? '\n\n🎙️ Audio recording active for evidence.' : ''}`
+                : `${emergencyTypes[type]} alert sent to your emergency contacts${type === 'security' ? '\n\n🎙️ Audio recording active for evidence.' : ''}`;
 
-              Alert.alert('Alert Sent', alertMessage);
+              Alert.alert('Alert Sent', notificationMessage);
             },
           },
         ]
@@ -192,8 +285,16 @@ export default function AlertScreen() {
     );
   };
 
-  const triggerDirectSOS = () => {
-    // Implementation of triggerDirectSOS
+  const triggerDirectSOS = async () => {
+    // Direct SOS without confirmation dialog (triggered by hardware buttons)
+    try {
+      console.log('DIRECT SOS TRIGGERED - Hardware Button Emergency');
+      Vibration.vibrate([0, 1000, 500, 1000]); // Strong vibration pattern
+      await triggerSOSAlert();
+    } catch (error) {
+      console.error('Error in direct SOS:', error);
+      Alert.alert('Emergency Error', 'Failed to trigger direct SOS. Please use the main SOS button.');
+    }
   };
 
   return (
@@ -293,14 +394,24 @@ export default function AlertScreen() {
           </View>
         </View>
 
-        {/* Test Hardware Button */}
-        <TouchableOpacity
-          style={styles.testButton}
-          onPress={simulateEmergency}
-        >
-          <Ionicons name="hardware-chip" size={16} color="#fff" />
-          <Text style={styles.testButtonText}>Test Power + Volume Down</Text>
-        </TouchableOpacity>
+        {/* Test Buttons */}
+        <View style={styles.testButtonsContainer}>
+          <TouchableOpacity
+            style={styles.testButton}
+            onPress={simulateEmergency}
+          >
+            <Ionicons name="hardware-chip" size={16} color="#fff" />
+            <Text style={styles.testButtonText}>Test Hardware</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.testButton, styles.testNotificationButton]}
+            onPress={testNotificationSystem}
+          >
+            <Ionicons name="notifications" size={16} color="#fff" />
+            <Text style={styles.testButtonText}>Test Notifications</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Active Alerts Display */}
         <View style={styles.activeAlerts}>
@@ -320,16 +431,39 @@ export default function AlertScreen() {
           )}
         </View>
 
+        {/* Emergency Contacts Status */}
+        <View style={styles.contactsStatus}>
+          <Text style={styles.contactsStatusTitle}>🔔 Emergency Notifications</Text>
+          <Text style={styles.contactsStatusText}>
+            {contacts.length > 0 && notificationPermission
+              ? `${contacts.length} contact(s) configured - Critical push notifications enabled`
+              : contacts.length > 0 && !notificationPermission
+              ? `${contacts.length} contact(s) configured - Enable notifications for alerts`
+              : 'No emergency contacts configured - Add contacts in My Community tab'
+            }
+          </Text>
+          {contacts.length > 0 && !notificationPermission && (
+            <TouchableOpacity 
+              style={styles.enableNotificationsButton}
+              onPress={checkNotificationPermission}
+            >
+              <Ionicons name="notifications" size={16} color="#fff" />
+              <Text style={styles.enableNotificationsText}>Enable Notifications</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
         {/* Emergency Information */}
         <View style={styles.emergencyInfo}>
           <Text style={styles.emergencyInfoTitle}>⚠️ Emergency Information</Text>
           <Text style={styles.emergencyInfoText}>
             • SOS button dispatches nearest police unit with GPS tracking{'\n'}
+            • Critical push notifications sent instantly to all emergency contacts{'\n'}
+            • Notifications bypass Do Not Disturb and silent mode{'\n'}
             • Power + Volume Down buttons trigger direct emergency SOS{'\n'}
             • Audio recording starts automatically for SOS and Security alerts{'\n'}
-            • All alerts bypass silent mode and send critical notifications{'\n'}
             • Response times are tracked for police monitoring{'\n'}
-            • Your medical information is shared with first responders
+            • Your medical information and location shared with first responders
           </Text>
         </View>
       </View>
@@ -495,6 +629,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
+  testButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    gap: 12,
+  },
   testButton: {
     backgroundColor: '#3498db',
     flexDirection: 'row',
@@ -503,14 +644,33 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 8,
-    marginBottom: 16,
-    alignSelf: 'center',
+    flex: 1,
+  },
+  testNotificationButton: {
+    backgroundColor: '#9b59b6',
   },
   testButtonText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  enableNotificationsButton: {
+    backgroundColor: '#e74c3c',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  enableNotificationsText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 6,
   },
   activeAlerts: {
     backgroundColor: '#fff3e0',
@@ -540,6 +700,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#7f8c8d',
     fontStyle: 'italic',
+  },
+  contactsStatus: {
+    backgroundColor: '#f8f9fa',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#3498db',
+  },
+  contactsStatusTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2c3e50',
+    marginBottom: 8,
+  },
+  contactsStatusText: {
+    fontSize: 14,
+    color: '#7f8c8d',
+    lineHeight: 20,
   },
   emergencyInfo: {
     backgroundColor: '#f8f9fa',
