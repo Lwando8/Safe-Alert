@@ -161,4 +161,4 @@ For support, please open an issue on GitHub or contact the development team.
 
 **⚠️ Important**: This is an emergency response application. Please ensure proper testing before deployment and compliance with local emergency service regulations.
 
-Built with ❤️ for user safety and peace of mind. 
+Built with ❤️ for user safety and peace of mind.
