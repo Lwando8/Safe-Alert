@@ -1,10 +1,527 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Platform,
+  Alert,
+  ScrollView,
+  RefreshControl,
+  Linking,
+  StatusBar,
+  ActivityIndicator,
+  Modal,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+
+interface EmergencyContact {
+  id: string;
+  name: string;
+  phone: string;
+  relationship: string;
+}
+
+interface ContactLocation {
+  id: string;
+  name: string;
+  location: {
+    latitude: number;
+    longitude: number;
+    timestamp: Date;
+  };
+  status: 'sharing' | 'last_seen' | 'not_sharing';
+  battery?: number;
+  accuracy?: number;
+}
 
 const MyCommunityScreen = () => {
+  const [contacts, setContacts] = useState<EmergencyContact[]>([]);
+  const [contactLocations, setContactLocations] = useState<ContactLocation[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [myLocation, setMyLocation] = useState<Location.LocationObject | null>(null);
+  const [selectedContact, setSelectedContact] = useState<ContactLocation | null>(null);
+  const [isMapModalVisible, setIsMapModalVisible] = useState(false);
+  const [locationPermission, setLocationPermission] = useState<boolean>(false);
+
+  useEffect(() => {
+    loadCommunityData();
+    getCurrentLocation();
+    
+    // Simulate real-time updates every 30 seconds
+    const interval = setInterval(() => {
+      if (contacts.length > 0) {
+        updateContactLocations();
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [contacts.length]);
+
+  const getCurrentLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocationPermission(status === 'granted');
+      
+      if (status === 'granted') {
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+        setMyLocation(location);
+      }
+    } catch (error) {
+      console.error('Error getting current location:', error);
+    }
+  };
+
+  const loadCommunityData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Load emergency contacts
+      const savedContacts = await AsyncStorage.getItem('emergencyContacts');
+      if (savedContacts) {
+        const contactsData = JSON.parse(savedContacts);
+        setContacts(contactsData);
+        
+        // Load or simulate contact locations
+        await loadContactLocations(contactsData);
+      }
+    } catch (error) {
+      console.error('Error loading community data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadContactLocations = async (contactsData: EmergencyContact[]) => {
+    try {
+      // In a real app, this would fetch from your backend API
+      // For now, we'll simulate realistic location data
+      const simulatedLocations: ContactLocation[] = contactsData.map((contact, index) => {
+        // Generate locations around major cities in South Africa
+        const cities = [
+          { lat: -26.2041, lng: 28.0473, name: 'Johannesburg' },
+          { lat: -33.9249, lng: 18.4241, name: 'Cape Town' },
+          { lat: -29.8587, lng: 31.0218, name: 'Durban' },
+          { lat: -25.7479, lng: 28.2293, name: 'Pretoria' },
+        ];
+        
+        const randomCity = cities[index % cities.length];
+        const latOffset = (Math.random() - 0.5) * 0.05; // ±2.5km
+        const lngOffset = (Math.random() - 0.5) * 0.05;
+        
+        const statuses: ('sharing' | 'last_seen' | 'not_sharing')[] = ['sharing', 'last_seen', 'not_sharing'];
+        const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
+        
+        return {
+          id: contact.id,
+          name: contact.name,
+          location: {
+            latitude: randomCity.lat + latOffset,
+            longitude: randomCity.lng + lngOffset,
+            timestamp: new Date(Date.now() - Math.random() * 1800000), // Random time within last 30 minutes
+          },
+          status: randomStatus,
+          battery: Math.floor(Math.random() * 100),
+          accuracy: Math.floor(Math.random() * 50) + 5, // 5-55 meters
+        };
+      });
+      
+      setContactLocations(simulatedLocations);
+    } catch (error) {
+      console.error('Error loading contact locations:', error);
+    }
+  };
+
+  const updateContactLocations = async () => {
+    // Simulate location updates for contacts that are sharing
+    setContactLocations(prevLocations => 
+      prevLocations.map(contact => {
+        if (contact.status === 'sharing') {
+          // Small random movement to simulate real movement
+          const latOffset = (Math.random() - 0.5) * 0.001; // ~100m
+          const lngOffset = (Math.random() - 0.5) * 0.001;
+          
+          return {
+            ...contact,
+            location: {
+              latitude: contact.location.latitude + latOffset,
+              longitude: contact.location.longitude + lngOffset,
+              timestamp: new Date(),
+            },
+            battery: Math.max(0, contact.battery! - Math.floor(Math.random() * 3)),
+          };
+        }
+        return contact;
+      })
+    );
+  };
+
+  const refreshCommunity = async () => {
+    setIsRefreshing(true);
+    await loadCommunityData();
+    setIsRefreshing(false);
+  };
+
+  const getStatusInfo = (status: string) => {
+    switch (status) {
+      case 'sharing':
+        return { color: '#2ecc71', icon: 'radio-button-on', text: 'Live' };
+      case 'last_seen':
+        return { color: '#f39c12', icon: 'time', text: 'Last seen' };
+      case 'not_sharing':
+        return { color: '#95a5a6', icon: 'radio-button-off', text: 'Not sharing' };
+      default:
+        return { color: '#95a5a6', icon: 'radio-button-off', text: 'Unknown' };
+    }
+  };
+
+  const getLocationAge = (timestamp: Date) => {
+    const now = new Date();
+    const diffMinutes = Math.floor((now.getTime() - timestamp.getTime()) / (1000 * 60));
+    
+    if (diffMinutes < 1) return 'Just now';
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    if (diffMinutes < 1440) return `${Math.floor(diffMinutes / 60)}h ago`;
+    return `${Math.floor(diffMinutes / 1440)}d ago`;
+  };
+
+  const openContactLocation = (contact: ContactLocation) => {
+    setSelectedContact(contact);
+    setIsMapModalVisible(true);
+  };
+
+  const openInMaps = (contact: ContactLocation) => {
+    const { latitude, longitude } = contact.location;
+    const label = encodeURIComponent(contact.name);
+    
+    const url = Platform.select({
+      ios: `maps:0,0?q=${latitude},${longitude}(${label})`,
+      android: `geo:0,0?q=${latitude},${longitude}(${label})`,
+    });
+
+    if (url) {
+      Linking.openURL(url).catch(() => {
+        Alert.alert('Error', 'Unable to open maps application');
+      });
+    }
+  };
+
+  const requestLocationFromContact = (contact: EmergencyContact) => {
+    Alert.alert(
+      'Request Location',
+      `Send a location request to ${contact.name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send Request',
+          onPress: () => {
+            // In a real app, this would send a push notification or SMS
+            Alert.alert(
+              'Request Sent',
+              `Location request sent to ${contact.name}. They will be notified to share their location.`
+            );
+          },
+        },
+      ]
+    );
+  };
+
+  const shareMyLocation = async () => {
+    if (!locationPermission) {
+      Alert.alert(
+        'Location Permission Required',
+        'Please enable location access to share your location with emergency contacts.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Settings', onPress: () => Linking.openSettings() },
+        ]
+      );
+      return;
+    }
+
+    try {
+      if (!myLocation) {
+        await getCurrentLocation();
+      }
+
+      Alert.alert(
+        'Share Location',
+        'This will share your live location with all emergency contacts for the next hour.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Share',
+            onPress: () => {
+              // In a real app, this would enable location sharing
+              Alert.alert('Success', 'Your location is now being shared with your emergency contacts.');
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Unable to share location. Please try again.');
+    }
+  };
+
+  const getContactInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(word => word.charAt(0))
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  const getRelationshipColor = (relationship: string) => {
+    const colors = {
+      'Family': '#e74c3c',
+      'Friend': '#3498db',
+      'Doctor': '#2ecc71',
+      'Neighbor': '#f39c12',
+      'Emergency Contact': '#9b59b6',
+    };
+    return colors[relationship as keyof typeof colors] || '#7f8c8d';
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#3498db" />
+        <Text style={styles.loadingText}>Loading your community...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>My Community screen will be coming soon.</Text>
+      <StatusBar barStyle="dark-content" backgroundColor="#f8f9fa" />
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerTitle}>My Community</Text>
+            <Text style={styles.headerSubtitle}>
+              {contactLocations.filter(c => c.status === 'sharing').length} of {contacts.length} sharing live location
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.shareButton}
+            onPress={shareMyLocation}
+          >
+            <Ionicons name="location" size={20} color="#fff" />
+            <Text style={styles.shareButtonText}>Share</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <ScrollView
+        style={styles.scrollView}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={refreshCommunity}
+            colors={['#3498db']}
+            tintColor="#3498db"
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {contacts.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="people-outline" size={80} color="#bdc3c7" />
+            <Text style={styles.emptyStateTitle}>No Community Members</Text>
+            <Text style={styles.emptyStateText}>
+              Add emergency contacts to see them in your community and share locations with each other.
+            </Text>
+            <TouchableOpacity
+              style={styles.addContactsButton}
+              onPress={() => {
+                // In a real app, this would navigate to contacts screen
+                Alert.alert('Add Contacts', 'Navigate to Contacts tab to add emergency contacts.');
+              }}
+            >
+              <Ionicons name="add" size={20} color="#fff" />
+              <Text style={styles.addContactsButtonText}>Add Emergency Contacts</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.communityList}>
+            {contacts.map((contact) => {
+              const locationData = contactLocations.find(cl => cl.id === contact.id);
+              const statusInfo = locationData ? getStatusInfo(locationData.status) : getStatusInfo('not_sharing');
+              
+              return (
+                <TouchableOpacity
+                  key={contact.id}
+                  style={styles.contactCard}
+                  onPress={() => locationData ? openContactLocation(locationData) : requestLocationFromContact(contact)}
+                >
+                  <View style={styles.contactContent}>
+                    <View style={styles.contactLeft}>
+                      <View style={[
+                        styles.contactAvatar,
+                        { backgroundColor: getRelationshipColor(contact.relationship) }
+                      ]}>
+                        <Text style={styles.contactAvatarText}>
+                          {getContactInitials(contact.name)}
+                        </Text>
+                      </View>
+                      <View style={styles.contactInfo}>
+                        <Text style={styles.contactName}>{contact.name}</Text>
+                        <View style={styles.statusRow}>
+                          <Ionicons 
+                            name={statusInfo.icon as any} 
+                            size={12} 
+                            color={statusInfo.color} 
+                          />
+                          <Text style={[styles.statusText, { color: statusInfo.color }]}>
+                            {statusInfo.text}
+                          </Text>
+                          {locationData && locationData.status !== 'not_sharing' && (
+                            <Text style={styles.locationTime}>
+                              • {getLocationAge(locationData.location.timestamp)}
+                            </Text>
+                          )}
+                        </View>
+                        <Text style={styles.relationshipText}>{contact.relationship}</Text>
+                      </View>
+                    </View>
+                    
+                    <View style={styles.contactRight}>
+                      {locationData && locationData.status === 'sharing' && locationData.battery && (
+                        <View style={styles.batteryContainer}>
+                          <Ionicons 
+                            name="battery-half" 
+                            size={16} 
+                            color={locationData.battery > 20 ? '#2ecc71' : '#e74c3c'} 
+                          />
+                          <Text style={styles.batteryText}>{locationData.battery}%</Text>
+                        </View>
+                      )}
+                      <Ionicons name="chevron-forward" size={20} color="#bdc3c7" />
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Safety Tips */}
+        {contacts.length > 0 && (
+          <View style={styles.tipsSection}>
+            <Text style={styles.tipsSectionTitle}>Location Sharing Tips</Text>
+            <View style={styles.tipsContainer}>
+              <View style={styles.tipItem}>
+                <Ionicons name="shield-checkmark" size={16} color="#2ecc71" />
+                <Text style={styles.tipText}>Location sharing is end-to-end encrypted</Text>
+              </View>
+              <View style={styles.tipItem}>
+                <Ionicons name="time" size={16} color="#3498db" />
+                <Text style={styles.tipText}>Shared locations expire after 24 hours</Text>
+              </View>
+              <View style={styles.tipItem}>
+                <Ionicons name="settings" size={16} color="#f39c12" />
+                <Text style={styles.tipText}>You can stop sharing anytime in settings</Text>
+              </View>
+            </View>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Map Modal */}
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={isMapModalVisible}
+        onRequestClose={() => setIsMapModalVisible(false)}
+      >
+        <View style={styles.mapModalContainer}>
+          <View style={styles.mapHeader}>
+            <TouchableOpacity
+              style={styles.mapCloseButton}
+              onPress={() => setIsMapModalVisible(false)}
+            >
+              <Ionicons name="close" size={24} color="#2c3e50" />
+            </TouchableOpacity>
+            <Text style={styles.mapTitle}>
+              {selectedContact?.name}'s Location
+            </Text>
+            <TouchableOpacity
+              style={styles.mapDirectionsButton}
+              onPress={() => selectedContact && openInMaps(selectedContact)}
+            >
+              <Ionicons name="navigate" size={20} color="#3498db" />
+            </TouchableOpacity>
+          </View>
+          
+          {selectedContact && (
+            <>
+              <MapView
+                style={styles.map}
+                provider={PROVIDER_GOOGLE}
+                initialRegion={{
+                  latitude: selectedContact.location.latitude,
+                  longitude: selectedContact.location.longitude,
+                  latitudeDelta: 0.01,
+                  longitudeDelta: 0.01,
+                }}
+                showsUserLocation={locationPermission}
+                showsMyLocationButton={true}
+              >
+                <Marker
+                  coordinate={{
+                    latitude: selectedContact.location.latitude,
+                    longitude: selectedContact.location.longitude,
+                  }}
+                  title={selectedContact.name}
+                  description={`Last updated: ${getLocationAge(selectedContact.location.timestamp)}`}
+                >
+                  <View style={styles.markerContainer}>
+                    <View style={[styles.marker, { backgroundColor: getStatusInfo(selectedContact.status).color }]}>
+                      <Text style={styles.markerText}>
+                        {getContactInitials(selectedContact.name)}
+                      </Text>
+                    </View>
+                  </View>
+                </Marker>
+              </MapView>
+              
+              <View style={styles.mapInfo}>
+                <View style={styles.mapInfoRow}>
+                  <Ionicons name="time" size={16} color="#7f8c8d" />
+                  <Text style={styles.mapInfoText}>
+                    Last updated: {getLocationAge(selectedContact.location.timestamp)}
+                  </Text>
+                </View>
+                {selectedContact.accuracy && (
+                  <View style={styles.mapInfoRow}>
+                    <Ionicons name="locate" size={16} color="#7f8c8d" />
+                    <Text style={styles.mapInfoText}>
+                      Accuracy: ±{selectedContact.accuracy}m
+                    </Text>
+                  </View>
+                )}
+                {selectedContact.battery && (
+                  <View style={styles.mapInfoRow}>
+                    <Ionicons name="battery-half" size={16} color="#7f8c8d" />
+                    <Text style={styles.mapInfoText}>
+                      Battery: {selectedContact.battery}%
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -12,13 +529,312 @@ const MyCommunityScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#f8f9fa',
+  },
+  loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#7f8c8d',
+  },
+  header: {
+    backgroundColor: '#fff',
+    paddingTop: Platform.OS === 'ios' ? 44 : 0,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#7f8c8d',
+  },
+  shareButton: {
+    backgroundColor: '#3498db',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#3498db',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  shareButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    paddingTop: 100,
+  },
+  emptyStateTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: '#7f8c8d',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 32,
+  },
+  addContactsButton: {
+    backgroundColor: '#3498db',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 25,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#3498db',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  addContactsButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  communityList: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  contactCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    marginBottom: 12,
+    padding: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  contactContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  contactLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  contactAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  contactAvatarText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  contactInfo: {
+    flex: 1,
+  },
+  contactName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#2c3e50',
+    marginBottom: 4,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 4,
+  },
+  locationTime: {
+    fontSize: 12,
+    color: '#7f8c8d',
+    marginLeft: 4,
+  },
+  relationshipText: {
+    fontSize: 12,
+    color: '#7f8c8d',
+  },
+  contactRight: {
+    alignItems: 'center',
+  },
+  batteryContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  batteryText: {
+    fontSize: 12,
+    color: '#7f8c8d',
+    marginLeft: 2,
+  },
+  tipsSection: {
+    backgroundColor: '#fff',
+    margin: 16,
+    borderRadius: 12,
+    padding: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  tipsSectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#2c3e50',
+    marginBottom: 16,
+  },
+  tipsContainer: {
+    gap: 12,
+  },
+  tipItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tipText: {
+    fontSize: 14,
+    color: '#7f8c8d',
+    marginLeft: 8,
+    flex: 1,
+  },
+  // Map Modal Styles
+  mapModalContainer: {
+    flex: 1,
     backgroundColor: '#fff',
   },
-  text: {
+  mapHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: Platform.OS === 'ios' ? 44 : 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#ecf0f1',
+  },
+  mapCloseButton: {
+    padding: 8,
+  },
+  mapTitle: {
     fontSize: 18,
-    color: '#888',
+    fontWeight: '600',
+    color: '#2c3e50',
+    flex: 1,
+    textAlign: 'center',
+  },
+  mapDirectionsButton: {
+    padding: 8,
+  },
+  map: {
+    flex: 1,
+  },
+  markerContainer: {
+    alignItems: 'center',
+  },
+  marker: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#fff',
+  },
+  markerText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  mapInfo: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#ecf0f1',
+  },
+  mapInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  mapInfoText: {
+    fontSize: 14,
+    color: '#7f8c8d',
+    marginLeft: 8,
   },
 });
 
