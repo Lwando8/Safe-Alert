@@ -12,10 +12,13 @@ import {
   StatusBar,
   ActivityIndicator,
   Modal,
+  TextInput,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import * as Contacts from 'expo-contacts';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 interface EmergencyContact {
@@ -47,6 +50,14 @@ const MyCommunityScreen = () => {
   const [selectedContact, setSelectedContact] = useState<ContactLocation | null>(null);
   const [isMapModalVisible, setIsMapModalVisible] = useState(false);
   const [locationPermission, setLocationPermission] = useState<boolean>(false);
+  
+  // Contact management states
+  const [isContactModalVisible, setIsContactModalVisible] = useState(false);
+  const [phoneContacts, setPhoneContacts] = useState<Contacts.Contact[]>([]);
+  const [filteredPhoneContacts, setFilteredPhoneContacts] = useState<Contacts.Contact[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoadingContacts, setIsLoadingContacts] = useState(false);
+  const [contactsPermission, setContactsPermission] = useState<boolean>(false);
 
   useEffect(() => {
     loadCommunityData();
@@ -289,6 +300,174 @@ const MyCommunityScreen = () => {
     return colors[relationship as keyof typeof colors] || '#7f8c8d';
   };
 
+  // Contact Management Functions
+  const requestContactsPermission = async () => {
+    try {
+      const { status } = await Contacts.requestPermissionsAsync();
+      setContactsPermission(status === 'granted');
+      return status === 'granted';
+    } catch (error) {
+      console.error('Error requesting contacts permission:', error);
+      return false;
+    }
+  };
+
+  const loadPhoneContacts = async () => {
+    try {
+      setIsLoadingContacts(true);
+      
+      const hasPermission = contactsPermission || await requestContactsPermission();
+      
+      if (!hasPermission) {
+        Alert.alert(
+          'Contacts Permission Required',
+          'Please enable contacts access to import your phone contacts.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Settings', onPress: () => Linking.openSettings() },
+          ]
+        );
+        return;
+      }
+
+      const { data } = await Contacts.getContactsAsync({
+        fields: [Contacts.Fields.Name, Contacts.Fields.PhoneNumbers],
+        sort: Contacts.SortTypes.FirstName,
+      });
+
+      // Filter contacts that have phone numbers
+      const contactsWithPhones = data.filter(contact => 
+        contact.phoneNumbers && contact.phoneNumbers.length > 0
+      );
+
+      setPhoneContacts(contactsWithPhones);
+      setFilteredPhoneContacts(contactsWithPhones);
+    } catch (error) {
+      console.error('Error loading phone contacts:', error);
+      Alert.alert('Error', 'Failed to load phone contacts');
+    } finally {
+      setIsLoadingContacts(false);
+    }
+  };
+
+  const searchContacts = (query: string) => {
+    setSearchQuery(query);
+    if (!query.trim()) {
+      setFilteredPhoneContacts(phoneContacts);
+      return;
+    }
+
+    const filtered = phoneContacts.filter(contact =>
+      contact.name?.toLowerCase().includes(query.toLowerCase()) ||
+      contact.phoneNumbers?.some(phone => 
+        phone.number?.includes(query)
+      )
+    );
+    setFilteredPhoneContacts(filtered);
+  };
+
+  const addEmergencyContact = async (contact: Contacts.Contact, relationship: string) => {
+    try {
+      if (!contact.phoneNumbers || contact.phoneNumbers.length === 0) {
+        Alert.alert('Error', 'This contact has no phone number');
+        return;
+      }
+
+      const primaryPhone = contact.phoneNumbers[0].number || '';
+      const contactName = contact.name || 'Unknown Contact';
+
+      // Check if contact already exists
+      const existingContact = contacts.find(c => 
+        c.phone === primaryPhone || c.name === contactName
+      );
+
+      if (existingContact) {
+        Alert.alert('Contact Exists', 'This contact is already in your emergency contacts');
+        return;
+      }
+
+      const newEmergencyContact: EmergencyContact = {
+        id: Date.now().toString(),
+        name: contactName,
+        phone: primaryPhone,
+        relationship: relationship,
+      };
+
+      const updatedContacts = [...contacts, newEmergencyContact];
+      await saveEmergencyContacts(updatedContacts);
+      
+      setIsContactModalVisible(false);
+      Alert.alert('Success', `${contactName} added to emergency contacts`);
+      
+    } catch (error) {
+      console.error('Error adding emergency contact:', error);
+      Alert.alert('Error', 'Failed to add emergency contact');
+    }
+  };
+
+  const removeEmergencyContact = (contactId: string) => {
+    const contactToRemove = contacts.find(c => c.id === contactId);
+    if (!contactToRemove) return;
+
+    Alert.alert(
+      'Remove Emergency Contact',
+      `Remove ${contactToRemove.name} from your emergency contacts?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const updatedContacts = contacts.filter(c => c.id !== contactId);
+              await saveEmergencyContacts(updatedContacts);
+              Alert.alert('Success', `${contactToRemove.name} removed from emergency contacts`);
+            } catch (error) {
+              console.error('Error removing contact:', error);
+              Alert.alert('Error', 'Failed to remove contact');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const saveEmergencyContacts = async (updatedContacts: EmergencyContact[]) => {
+    try {
+      await AsyncStorage.setItem('emergencyContacts', JSON.stringify(updatedContacts));
+      setContacts(updatedContacts);
+      
+      // Update location data for new contacts
+      await loadContactLocations(updatedContacts);
+    } catch (error) {
+      console.error('Error saving emergency contacts:', error);
+      throw error;
+    }
+  };
+
+  const openContactImportModal = async () => {
+    setIsContactModalVisible(true);
+    if (phoneContacts.length === 0) {
+      await loadPhoneContacts();
+    }
+  };
+
+  const selectRelationshipAndAdd = (contact: Contacts.Contact) => {
+    const relationships = ['Family', 'Friend', 'Doctor', 'Neighbor', 'Emergency Contact'];
+    
+    Alert.alert(
+      'Select Relationship',
+      `Choose relationship for ${contact.name}:`,
+      [
+        ...relationships.map(rel => ({
+          text: rel,
+          onPress: () => addEmergencyContact(contact, rel)
+        })),
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -342,10 +521,7 @@ const MyCommunityScreen = () => {
             </Text>
             <TouchableOpacity
               style={styles.addContactsButton}
-              onPress={() => {
-                // In a real app, this would navigate to contacts screen
-                Alert.alert('Add Contacts', 'Navigate to Contacts tab to add emergency contacts.');
-              }}
+              onPress={openContactImportModal}
             >
               <Ionicons name="add" size={20} color="#fff" />
               <Text style={styles.addContactsButtonText}>Add Emergency Contacts</Text>
@@ -362,6 +538,7 @@ const MyCommunityScreen = () => {
                   key={contact.id}
                   style={styles.contactCard}
                   onPress={() => locationData ? openContactLocation(locationData) : requestLocationFromContact(contact)}
+                  onLongPress={() => removeEmergencyContact(contact.id)}
                 >
                   <View style={styles.contactContent}>
                     <View style={styles.contactLeft}>
@@ -412,6 +589,16 @@ const MyCommunityScreen = () => {
               );
             })}
           </View>
+        )}
+
+        {/* Add Contact FAB */}
+        {contacts.length > 0 && (
+          <TouchableOpacity
+            style={styles.addContactFAB}
+            onPress={openContactImportModal}
+          >
+            <Ionicons name="person-add" size={24} color="#fff" />
+          </TouchableOpacity>
         )}
 
         {/* Safety Tips */}
@@ -520,6 +707,99 @@ const MyCommunityScreen = () => {
               </View>
             </>
           )}
+        </View>
+      </Modal>
+
+      {/* Contact Import Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isContactModalVisible}
+        onRequestClose={() => setIsContactModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.contactModalContent}>
+            <View style={styles.contactModalHeader}>
+              <Text style={styles.contactModalTitle}>Import Emergency Contacts</Text>
+              <TouchableOpacity
+                style={styles.contactModalCloseButton}
+                onPress={() => setIsContactModalVisible(false)}
+              >
+                <Ionicons name="close" size={24} color="#7f8c8d" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={20} color="#7f8c8d" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                value={searchQuery}
+                onChangeText={searchContacts}
+                placeholder="Search contacts..."
+                placeholderTextColor="#bdc3c7"
+              />
+            </View>
+
+            {isLoadingContacts ? (
+              <View style={styles.contactsLoadingContainer}>
+                <ActivityIndicator size="large" color="#3498db" />
+                <Text style={styles.contactsLoadingText}>Loading your contacts...</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={filteredPhoneContacts}
+                keyExtractor={(item) => item.id || item.name || Math.random().toString()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity 
+                    style={styles.phoneContactItem}
+                    onPress={() => selectRelationshipAndAdd(item)}
+                  >
+                    <View style={styles.phoneContactInfo}>
+                      <View style={styles.phoneContactAvatar}>
+                        <Text style={styles.phoneContactAvatarText}>
+                          {getContactInitials(item.name || 'N/A')}
+                        </Text>
+                      </View>
+                      <View style={styles.phoneContactDetails}>
+                        <Text style={styles.phoneContactName}>
+                          {item.name || 'Unknown Contact'}
+                        </Text>
+                        <Text style={styles.phoneContactNumber}>
+                          {item.phoneNumbers?.[0]?.number || 'No phone number'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Ionicons name="add-circle" size={24} color="#3498db" />
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={() => (
+                  <View style={styles.emptyContactsContainer}>
+                    <Ionicons name="people-outline" size={48} color="#bdc3c7" />
+                    <Text style={styles.emptyContactsText}>
+                      {searchQuery ? 'No contacts found' : 'No contacts available'}
+                    </Text>
+                    {!contactsPermission && (
+                      <TouchableOpacity
+                        style={styles.permissionButton}
+                        onPress={loadPhoneContacts}
+                      >
+                        <Ionicons name="settings" size={16} color="#fff" />
+                        <Text style={styles.permissionButtonText}>Grant Permission</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+                showsVerticalScrollIndicator={false}
+                style={styles.contactsList}
+              />
+            )}
+
+            <View style={styles.contactModalFooter}>
+              <Text style={styles.contactModalFooterText}>
+                Tap any contact to add them as an emergency contact
+              </Text>
+            </View>
+          </View>
         </View>
       </Modal>
     </View>
@@ -835,6 +1115,168 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#7f8c8d',
     marginLeft: 8,
+  },
+  // Contact Management Styles
+  addContactFAB: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#3498db',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#3498db',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  contactModalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    maxHeight: '90%',
+  },
+  contactModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ecf0f1',
+  },
+  contactModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    flex: 1,
+  },
+  contactModalCloseButton: {
+    padding: 8,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    marginHorizontal: 20,
+    marginVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    height: 48,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#2c3e50',
+  },
+  contactsLoadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  contactsLoadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#7f8c8d',
+  },
+  contactsList: {
+    maxHeight: 400,
+  },
+  phoneContactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ecf0f1',
+  },
+  phoneContactInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  phoneContactAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#3498db',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  phoneContactAvatarText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  phoneContactDetails: {
+    flex: 1,
+  },
+  phoneContactName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2c3e50',
+    marginBottom: 2,
+  },
+  phoneContactNumber: {
+    fontSize: 14,
+    color: '#7f8c8d',
+  },
+  emptyContactsContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  emptyContactsText: {
+    fontSize: 16,
+    color: '#7f8c8d',
+    textAlign: 'center',
+    marginTop: 16,
+    marginBottom: 20,
+  },
+  permissionButton: {
+    backgroundColor: '#3498db',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  permissionButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  contactModalFooter: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#ecf0f1',
+  },
+  contactModalFooterText: {
+    fontSize: 14,
+    color: '#7f8c8d',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
 
