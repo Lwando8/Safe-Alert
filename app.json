@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "Safe Alert",
+    "slug": "safety-alert-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lwandonova.safetyalertapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "This app uses location services to provide emergency alerts and share your location with emergency contacts.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses location services to provide emergency alerts and share your location with emergency contacts even when the app is in the background.",
+        "NSLocationAlwaysUsageDescription": "This app uses location services to provide emergency alerts and share your location with emergency contacts even when the app is in the background."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ],
+      "package": "com.lwandonova.safetyalertapp"
+    },
+    "web": {
+      "favicon": "./assets/icon.png"
+    },
+    "entryPoint": "./App.tsx",
+    "extra": {
+      "eas": {
+        "projectId": "f9205a74-28bb-4abb-b289-13699fe0b32d"
+      }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location."
+        }
+      ]
+    ]
+  }
+}
