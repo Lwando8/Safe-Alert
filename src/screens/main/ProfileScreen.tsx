@@ -13,6 +13,16 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import Screen from '../../components/Screen';
+import GlassCard from '../../components/GlassCard';
+import { useTheme } from '../../context/ThemeContext';
+
+// Fallback for LinearGradient in Expo Go
+let LinearGradient: any;
+try {
+  LinearGradient = require('expo-linear-gradient').LinearGradient;
+} catch {
+  LinearGradient = View; // Fallback to regular View
+}
 
 interface UserProfile {
   fullName: string;
@@ -30,16 +40,27 @@ interface UserProfile {
 
 const windowWidth = Dimensions.get('window').width;
 
-const QuickAction = ({ icon, label, color }: { icon: any; label: string; color: string }) => (
-  <View style={styles.quickActionContainer}>
+const QuickAction = ({ 
+  icon, 
+  label, 
+  color, 
+  onPress 
+}: { 
+  icon: any; 
+  label: string; 
+  color: string;
+  onPress: () => void;
+}) => (
+  <TouchableOpacity style={styles.quickActionContainer} onPress={onPress}>
     <View style={[styles.quickActionIcon, { backgroundColor: color }]}> 
       {icon}
     </View>
     <Text style={styles.quickActionLabel}>{label}</Text>
-  </View>
+  </TouchableOpacity>
 );
 
 export default function ProfileScreen() {
+  const { theme, isDark } = useTheme();
   const navigation = useNavigation();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -112,26 +133,26 @@ export default function ProfileScreen() {
   const profileActions = [
     {
       title: 'Edit Profile',
-      icon: 'person',
-      color: '#4F8EF7',
+      icon: <Ionicons name="person" size={24} color="#fff" />,
+      color: theme.contact,
       onPress: () => navigation.navigate('EditProfile' as never)
     },
     {
       title: 'Medical Info',
-      icon: 'medical',
-      color: '#F76B6B',
+      icon: <Ionicons name="medical" size={24} color="#fff" />,
+      color: theme.hospital,
       onPress: () => navigation.navigate('MedicalInfo' as never)
     },
     {
       title: 'Settings',
-      icon: 'settings',
-      color: '#A259D9',
+      icon: <Ionicons name="settings" size={24} color="#fff" />,
+      color: theme.monitor,
       onPress: () => navigation.navigate('Settings' as never)
     },
     {
-      title: 'Emergency Monitor',
-      icon: 'pulse',
-      color: '#F7B801',
+      title: 'Emergency',
+      icon: <Ionicons name="pulse" size={24} color="#fff" />,
+      color: theme.location,
       onPress: () => navigation.navigate('EmergencyMonitoring' as never)
     }
   ];
@@ -139,184 +160,231 @@ export default function ProfileScreen() {
   if (isLoading) {
     return (
       <Screen>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading profile...</Text>
-        </View>
+        <LinearGradient colors={theme.backgroundGradient} style={styles.container}>
+          <View style={styles.loadingContainer}>
+            <GlassCard style={styles.loadingCard}>
+              <Text style={[styles.loadingText, { color: theme.text }]}>Loading profile...</Text>
+            </GlassCard>
+          </View>
+        </LinearGradient>
       </Screen>
     );
   }
 
   return (
     <Screen>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Profile Header */}
-        <View style={styles.profileHeader}>
-          <View style={styles.avatarContainer}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>
-                {userProfile ? getInitials(userProfile.fullName) : 'UN'}
-              </Text>
-            </View>
-            <Text style={styles.profileName}>
-              {userProfile?.fullName || 'User Name'}
-            </Text>
-            <Text style={styles.profileEmail}>
-              {userProfile?.email || 'user@example.com'}
-            </Text>
-          </View>
-          <View style={styles.statusRow}>
-            <View style={styles.statusItem}>
-              <Ionicons name="checkmark-circle" size={24} color="#2ecc40" />
-              <Text style={styles.statusLabel}>Protected</Text>
-            </View>
-            <View style={styles.statusItem}>
-              <Ionicons name="checkmark-circle" size={24} color="#2ecc40" />
-              <Text style={styles.statusLabel}>Connected</Text>
-            </View>
-            <View style={styles.statusItem}>
-              <Ionicons name="checkmark-circle" size={24} color="#2ecc40" />
-              <Text style={styles.statusLabel}>Tracked</Text>
-            </View>
-          </View>
-        </View>
+      <LinearGradient colors={theme.backgroundGradient} style={styles.container}>
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          <View style={styles.content}>
+            {/* Profile Header */}
+            <GlassCard style={styles.profileHeader}>
+              <View style={styles.avatarContainer}>
+                <View style={[styles.avatarCircle, { backgroundColor: theme.primary }]}>
+                  <Text style={styles.avatarText}>
+                    {userProfile ? getInitials(userProfile.fullName) : 'UN'}
+                  </Text>
+                </View>
+                <Text style={[styles.profileName, { color: theme.text }]}>
+                  {userProfile?.fullName || 'User Name'}
+                </Text>
+                <Text style={[styles.profileEmail, { color: theme.textSecondary }]}>
+                  {userProfile?.email || 'user@example.com'}
+                </Text>
+              </View>
+              <View style={styles.statusRow}>
+                <View style={styles.statusItem}>
+                  <View style={[styles.statusIcon, { backgroundColor: theme.location }]}>
+                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                  </View>
+                  <Text style={[styles.statusLabel, { color: theme.textSecondary }]}>Protected</Text>
+                </View>
+                <View style={styles.statusItem}>
+                  <View style={[styles.statusIcon, { backgroundColor: theme.contact }]}>
+                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                  </View>
+                  <Text style={[styles.statusLabel, { color: theme.textSecondary }]}>Connected</Text>
+                </View>
+                <View style={styles.statusItem}>
+                  <View style={[styles.statusIcon, { backgroundColor: theme.monitor }]}>
+                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                  </View>
+                  <Text style={[styles.statusLabel, { color: theme.textSecondary }]}>Tracked</Text>
+                </View>
+              </View>
+            </GlassCard>
 
-        {/* Quick Actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.quickActionsRow}>
-            {profileActions.map((action, index) => (
-              <QuickAction
-                key={index}
-                icon={<Ionicons name={action.icon as any} size={24} color="#fff" />}
-                label={action.title}
-                color={action.color}
-              />
-            ))}
-          </View>
-        </View>
+            {/* Quick Actions */}
+            <GlassCard style={styles.quickActionsCard}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Quick Actions</Text>
+              <View style={styles.quickActionsGrid}>
+                {profileActions.map((action, index) => (
+                  <QuickAction
+                    key={index}
+                    icon={action.icon}
+                    label={action.title}
+                    color={action.color}
+                    onPress={action.onPress}
+                  />
+                ))}
+              </View>
+            </GlassCard>
 
-        {/* Personal Information */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Personal Information</Text>
-          <View style={styles.infoCard}>
-            <View style={styles.infoRow}>
-              <Ionicons name="person" size={20} color="#7f8c8d" />
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Full Name</Text>
-                <Text style={styles.infoValue}>{userProfile?.fullName || 'Not set'}</Text>
+            {/* Personal Information */}
+            <GlassCard style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Personal Information</Text>
+              <View style={styles.infoCard}>
+                <View style={[styles.infoRow, { backgroundColor: theme.surface }]}>
+                  <View style={[styles.infoIcon, { backgroundColor: theme.contact }]}>
+                    <Ionicons name="person" size={16} color="#fff" />
+                  </View>
+                  <View style={styles.infoContent}>
+                    <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Full Name</Text>
+                    <Text style={[styles.infoValue, { color: theme.text }]}>
+                      {userProfile?.fullName || 'Not set'}
+                    </Text>
+                  </View>
+                </View>
+                <View style={[styles.infoRow, { backgroundColor: theme.surface }]}>
+                  <View style={[styles.infoIcon, { backgroundColor: theme.location }]}>
+                    <Ionicons name="mail" size={16} color="#fff" />
+                  </View>
+                  <View style={styles.infoContent}>
+                    <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Email</Text>
+                    <Text style={[styles.infoValue, { color: theme.text }]}>
+                      {userProfile?.email || 'Not set'}
+                    </Text>
+                  </View>
+                </View>
+                <View style={[styles.infoRow, { backgroundColor: theme.surface }]}>
+                  <View style={[styles.infoIcon, { backgroundColor: theme.monitor }]}>
+                    <Ionicons name="call" size={16} color="#fff" />
+                  </View>
+                  <View style={styles.infoContent}>
+                    <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Phone</Text>
+                    <Text style={[styles.infoValue, { color: theme.text }]}>
+                      {userProfile?.phone || 'Not set'}
+                    </Text>
+                  </View>
+                </View>
               </View>
-            </View>
-            <View style={styles.infoRow}>
-              <Ionicons name="mail" size={20} color="#7f8c8d" />
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Email</Text>
-                <Text style={styles.infoValue}>{userProfile?.email || 'Not set'}</Text>
-              </View>
-            </View>
-            <View style={styles.infoRow}>
-              <Ionicons name="call" size={20} color="#7f8c8d" />
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Phone</Text>
-                <Text style={styles.infoValue}>{userProfile?.phone || 'Not set'}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
+            </GlassCard>
 
-        {/* Medical Information */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Medical Information</Text>
-          <View style={styles.infoCard}>
-            <View style={styles.infoRow}>
-              <Ionicons name="water" size={20} color="#e74c3c" />
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Blood Type</Text>
-                <Text style={styles.infoValue}>{userProfile?.bloodType || 'Not set'}</Text>
+            {/* Medical Information */}
+            <GlassCard style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Medical Information</Text>
+              <View style={styles.infoCard}>
+                <View style={[styles.infoRow, { backgroundColor: theme.surface }]}>
+                  <View style={[styles.infoIcon, { backgroundColor: theme.hospital }]}>
+                    <Ionicons name="water" size={16} color="#fff" />
+                  </View>
+                  <View style={styles.infoContent}>
+                    <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Blood Type</Text>
+                    <Text style={[styles.infoValue, { color: theme.text }]}>
+                      {userProfile?.bloodType || 'Not set'}
+                    </Text>
+                  </View>
+                </View>
+                <View style={[styles.infoRow, { backgroundColor: theme.surface }]}>
+                  <View style={[styles.infoIcon, { backgroundColor: theme.contact }]}>
+                    <Ionicons name="shield" size={16} color="#fff" />
+                  </View>
+                  <View style={styles.infoContent}>
+                    <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Medical Aid</Text>
+                    <Text style={[styles.infoValue, { color: theme.text }]}>
+                      {userProfile?.medicalAid || 'Not set'}
+                    </Text>
+                  </View>
+                </View>
+                <View style={[styles.infoRow, { backgroundColor: theme.surface }]}>
+                  <View style={[styles.infoIcon, { backgroundColor: theme.location }]}>
+                    <Ionicons name="warning" size={16} color="#fff" />
+                  </View>
+                  <View style={styles.infoContent}>
+                    <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Allergies</Text>
+                    <Text style={[styles.infoValue, { color: theme.text }]}>
+                      {userProfile?.allergies || 'None specified'}
+                    </Text>
+                  </View>
+                </View>
               </View>
-            </View>
-            <View style={styles.infoRow}>
-              <Ionicons name="shield" size={20} color="#3498db" />
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Medical Aid</Text>
-                <Text style={styles.infoValue}>{userProfile?.medicalAid || 'Not set'}</Text>
-              </View>
-            </View>
-            <View style={styles.infoRow}>
-              <Ionicons name="warning" size={20} color="#f39c12" />
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Allergies</Text>
-                <Text style={styles.infoValue}>{userProfile?.allergies || 'None specified'}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
+            </GlassCard>
 
-        {/* Emergency Medical Info Card */}
-        <View style={styles.emergencyCard}>
-          <View style={styles.emergencyHeader}>
-            <Ionicons name="medical" size={24} color="#e74c3c" />
-            <Text style={styles.emergencyTitle}>Emergency Medical Info</Text>
-          </View>
-          <View style={styles.emergencyContent}>
-            <Text style={styles.emergencyText}>
-              This information is shared with first responders during emergencies
-            </Text>
-            <View style={styles.emergencyDetails}>
-              <Text style={styles.emergencyDetailText}>
-                🩸 Blood Type: {userProfile?.bloodType || 'Not specified'}
-              </Text>
-              <Text style={styles.emergencyDetailText}>
-                ⚠️ Allergies: {userProfile?.allergies || 'None specified'}
-              </Text>
-              <Text style={styles.emergencyDetailText}>
-                💊 Medications: {userProfile?.medications || 'None specified'}
-              </Text>
-            </View>
-          </View>
-        </View>
+            {/* Emergency Medical Info Card */}
+            <GlassCard style={styles.emergencyCard}>
+              <View style={styles.emergencyHeader}>
+                <View style={[styles.emergencyIcon, { backgroundColor: theme.hospital }]}>
+                  <Ionicons name="medical" size={20} color="#fff" />
+                </View>
+                <Text style={[styles.emergencyTitle, { color: theme.text }]}>Emergency Medical Info</Text>
+              </View>
+              <View style={styles.emergencyContent}>
+                <Text style={[styles.emergencyText, { color: theme.textSecondary }]}>
+                  This information is shared with first responders during emergencies
+                </Text>
+                <View style={styles.emergencyDetails}>
+                  <Text style={[styles.emergencyDetailText, { color: theme.text }]}>
+                    🩸 Blood Type: {userProfile?.bloodType || 'Not specified'}
+                  </Text>
+                  <Text style={[styles.emergencyDetailText, { color: theme.text }]}>
+                    ⚠️ Allergies: {userProfile?.allergies || 'None specified'}
+                  </Text>
+                  <Text style={[styles.emergencyDetailText, { color: theme.text }]}>
+                    💊 Medications: {userProfile?.medications || 'None specified'}
+                  </Text>
+                </View>
+              </View>
+            </GlassCard>
 
-        {/* Settings Links */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>More Options</Text>
-          <View style={styles.linksList}>
-            <TouchableOpacity 
-              style={styles.linkItem}
-              onPress={() => navigation.navigate('EmergencyContacts' as never)}
-            >
-              <Ionicons name="people" size={20} color="#3498db" />
-              <Text style={styles.linkText}>Emergency Contacts</Text>
-              <Ionicons name="chevron-forward" size={16} color="#bdc3c7" />
+            {/* Settings Links */}
+            <GlassCard style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>More Options</Text>
+              <View style={styles.linksList}>
+                <TouchableOpacity 
+                  style={[styles.linkItem, { backgroundColor: theme.surface }]}
+                  onPress={() => navigation.navigate('EmergencyContacts' as never)}
+                >
+                  <View style={[styles.linkIcon, { backgroundColor: theme.contact }]}>
+                    <Ionicons name="people" size={16} color="#fff" />
+                  </View>
+                  <Text style={[styles.linkText, { color: theme.text }]}>Emergency Contacts</Text>
+                  <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.linkItem, { backgroundColor: theme.surface }]}
+                  onPress={() => navigation.navigate('PrivacyPolicy' as never)}
+                >
+                  <View style={[styles.linkIcon, { backgroundColor: theme.location }]}>
+                    <Ionicons name="shield-checkmark" size={16} color="#fff" />
+                  </View>
+                  <Text style={[styles.linkText, { color: theme.text }]}>Privacy Policy</Text>
+                  <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.linkItem, styles.lastLinkItem, { backgroundColor: theme.surface }]}
+                  onPress={() => navigation.navigate('Terms' as never)}
+                >
+                  <View style={[styles.linkIcon, { backgroundColor: theme.monitor }]}>
+                    <Ionicons name="document-text" size={16} color="#fff" />
+                  </View>
+                  <Text style={[styles.linkText, { color: theme.text }]}>Terms of Service</Text>
+                  <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            </GlassCard>
+
+            {/* Logout Button */}
+            <TouchableOpacity style={[styles.logoutButton, { backgroundColor: theme.primary }]} onPress={logout}>
+              <Ionicons name="log-out" size={20} color="#fff" />
+              <Text style={styles.logoutText}>Logout</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.linkItem}
-              onPress={() => navigation.navigate('PrivacyPolicy' as never)}
-            >
-              <Ionicons name="shield-checkmark" size={20} color="#27ae60" />
-              <Text style={styles.linkText}>Privacy Policy</Text>
-              <Ionicons name="chevron-forward" size={16} color="#bdc3c7" />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.linkItem, styles.lastLinkItem]}
-              onPress={() => navigation.navigate('Terms' as never)}
-            >
-              <Ionicons name="document-text" size={20} color="#8e44ad" />
-              <Text style={styles.linkText}>Terms of Service</Text>
-              <Ionicons name="chevron-forward" size={16} color="#bdc3c7" />
-            </TouchableOpacity>
+
+            {/* App Version */}
+            <GlassCard style={styles.versionCard}>
+              <Text style={[styles.versionText, { color: theme.textSecondary }]}>Safe Alert v1.0.0</Text>
+            </GlassCard>
           </View>
-        </View>
-
-        {/* Logout Button */}
-        <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-          <Ionicons name="log-out" size={20} color="#fff" />
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-
-        {/* App Version */}
-        <View style={styles.versionContainer}>
-          <Text style={styles.versionText}>Safe Alert v1.0.0</Text>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </LinearGradient>
     </Screen>
   );
 }
@@ -324,260 +392,272 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 40,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+  },
+  loadingCard: {
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+    alignItems: 'center',
   },
   loadingText: {
     fontSize: 16,
-    color: '#7f8c8d',
+    fontWeight: '500',
   },
   profileHeader: {
-    backgroundColor: '#fff',
     alignItems: 'center',
     paddingVertical: 32,
-    paddingHorizontal: 16,
-    marginBottom: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+    marginBottom: 20,
   },
   avatarContainer: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 24,
   },
   avatarCircle: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#F76B6B',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#DC143C',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+      },
+      android: {
+        elevation: 12,
+      },
+    }),
   },
   avatarText: {
     color: '#fff',
     fontSize: 36,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   profileName: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2c3e50',
+    fontWeight: '700',
     marginBottom: 4,
+    letterSpacing: -0.5,
   },
   profileEmail: {
     fontSize: 16,
-    color: '#7f8c8d',
+    fontWeight: '500',
     marginBottom: 24,
   },
   statusRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 18,
+    gap: 32,
   },
   statusItem: {
     alignItems: 'center',
-    marginHorizontal: 18,
+  },
+  statusIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   statusLabel: {
-    color: '#2ecc40',
     fontWeight: '600',
     fontSize: 14,
-    marginTop: 4,
   },
-  section: {
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 12,
-    padding: 20,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+  quickActionsCard: {
+    marginBottom: 20,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#2c3e50',
-    marginBottom: 16,
-  },
-  quickActionsRow: {
+  quickActionsGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: windowWidth * 0.9,
-    marginBottom: 12,
+    flexWrap: 'wrap',
+    gap: 16,
   },
   quickActionContainer: {
     flex: 1,
     alignItems: 'center',
-    backgroundColor: '#f8f8f8',
-    borderRadius: 16,
-    marginHorizontal: 8,
-    paddingVertical: 18,
-    paddingHorizontal: 0,
-    minWidth: 120,
+    minWidth: (windowWidth - 72) / 2, // Account for padding and gap
+    paddingVertical: 20,
+    paddingHorizontal: 16,
   },
   quickActionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
   quickActionLabel: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#222',
+    fontWeight: '600',
+    textAlign: 'center',
+    color: '#fff',
+  },
+  section: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 16,
+    letterSpacing: -0.5,
   },
   infoCard: {
-    gap: 16,
+    gap: 12,
   },
   infoRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#f8f9fa',
-    padding: 12,
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+  },
+  infoIcon: {
+    width: 32,
+    height: 32,
     borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   infoContent: {
-    marginLeft: 12,
     flex: 1,
   },
   infoLabel: {
     fontSize: 12,
-    color: '#7f8c8d',
     fontWeight: '600',
     marginBottom: 2,
   },
   infoValue: {
-    fontSize: 14,
-    color: '#2c3e50',
+    fontSize: 16,
     fontWeight: '500',
   },
   emergencyCard: {
-    backgroundColor: '#fff3e0',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#e74c3c',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: 'rgba(231, 76, 60, 0.3)',
   },
   emergencyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  emergencyIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   emergencyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#e74c3c',
-    marginLeft: 8,
+    fontSize: 18,
+    fontWeight: '700',
   },
   emergencyContent: {
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   emergencyText: {
     fontSize: 14,
-    color: '#7f8c8d',
-    marginBottom: 12,
+    marginBottom: 16,
     fontStyle: 'italic',
+    lineHeight: 20,
   },
   emergencyDetails: {
     gap: 8,
   },
   emergencyDetailText: {
-    fontSize: 14,
-    color: '#2c3e50',
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '500',
   },
   linksList: {
-    gap: 0,
+    gap: 12,
   },
   linkItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
   },
   lastLinkItem: {
-    borderBottomWidth: 0,
+    marginBottom: 0,
+  },
+  linkIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   linkText: {
     fontSize: 16,
-    color: '#2c3e50',
-    marginLeft: 12,
+    fontWeight: '500',
     flex: 1,
   },
   logoutButton: {
-    backgroundColor: '#e74c3c',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 20,
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     ...Platform.select({
       ios: {
-        shadowColor: '#e74c3c',
-        shadowOffset: { width: 0, height: 2 },
+        shadowColor: '#DC143C',
+        shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.3,
-        shadowRadius: 4,
+        shadowRadius: 16,
       },
       android: {
-        elevation: 3,
+        elevation: 12,
       },
     }),
   },
   logoutText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     marginLeft: 8,
   },
-  versionContainer: {
+  versionCard: {
     alignItems: 'center',
     paddingVertical: 16,
-    marginBottom: 32,
   },
   versionText: {
     fontSize: 12,
-    color: '#bdc3c7',
+    fontWeight: '500',
   },
 }); 

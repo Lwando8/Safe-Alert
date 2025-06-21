@@ -17,6 +17,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import * as SMS from 'expo-sms';
 import Screen from '../../components/Screen';
+import GlassCard from '../../components/GlassCard';
+import { useTheme } from '../../context/ThemeContext';
+
+// Fallback for LinearGradient in Expo Go
+let LinearGradient: any;
+try {
+  LinearGradient = require('expo-linear-gradient').LinearGradient;
+} catch {
+  LinearGradient = View; // Fallback to regular View
+}
 
 interface EmergencyContact {
   id: string;
@@ -26,6 +36,7 @@ interface EmergencyContact {
 }
 
 export default function ContactsScreen() {
+  const { theme, isDark } = useTheme();
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -213,225 +224,271 @@ export default function ContactsScreen() {
   };
 
   const getRelationshipColor = (relationship: string) => {
-    const colors = {
-      'Family': '#e74c3c',
-      'Friend': '#3498db',
-      'Doctor': '#2ecc71',
-      'Neighbor': '#f39c12',
-      'Emergency Contact': '#9b59b6',
-    };
-    return colors[relationship as keyof typeof colors] || '#7f8c8d';
+    switch (relationship.toLowerCase()) {
+      case 'family':
+      case 'parent':
+      case 'spouse':
+        return theme.hospital;
+      case 'friend':
+        return theme.contact;
+      case 'doctor':
+      case 'medical':
+        return theme.security;
+      case 'neighbor':
+      case 'colleague':
+        return theme.monitor;
+      default:
+        return theme.location;
+    }
   };
 
   return (
     <Screen>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Ionicons name="people" size={32} color="#e74c3c" />
-          <Text style={styles.headerTitle}>Emergency Contacts</Text>
-          <Text style={styles.headerSubtitle}>
-            {contacts.length} contact{contacts.length !== 1 ? 's' : ''} configured
-          </Text>
-        </View>
+      <LinearGradient colors={theme.backgroundGradient} style={styles.container}>
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          <View style={styles.content}>
+            {/* Header */}
+            <GlassCard style={styles.header}>
+              <View style={[styles.headerIcon, { backgroundColor: theme.contact }]}>
+                <Ionicons name="people" size={32} color="#fff" />
+              </View>
+              <Text style={[styles.headerTitle, { color: theme.text }]}>Emergency Contacts</Text>
+              <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+                {contacts.length} contact{contacts.length !== 1 ? 's' : ''} configured
+              </Text>
+            </GlassCard>
 
-        {/* Emergency Alert Button */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={[styles.emergencyButton, isLoading && styles.emergencyButtonDisabled]}
-            onPress={sendEmergencyAlert}
-            disabled={isLoading}
-          >
-            <Ionicons 
-              name={isLoading ? "sync" : "warning"} 
-              size={24} 
-              color="#fff" 
-            />
-            <Text style={styles.emergencyButtonText}>
-              {isLoading ? 'Sending Alert...' : 'Send Emergency Alert'}
-            </Text>
-          </TouchableOpacity>
-          <Text style={styles.emergencyButtonSubtext}>
-            Sends alert with your location to all emergency contacts
-          </Text>
-        </View>
+            {/* Emergency Alert Button */}
+            <TouchableOpacity
+              style={[styles.emergencyButton, { backgroundColor: theme.primary }, isLoading && styles.emergencyButtonDisabled]}
+              onPress={sendEmergencyAlert}
+              disabled={isLoading}
+            >
+              <Ionicons 
+                name={isLoading ? "sync" : "warning"} 
+                size={24} 
+                color="#fff" 
+              />
+              <Text style={styles.emergencyButtonText}>
+                {isLoading ? 'Sending Alert...' : 'Send Emergency Alert'}
+              </Text>
+            </TouchableOpacity>
+            
+            <GlassCard style={styles.emergencyInfo}>
+              <Text style={[styles.emergencyInfoText, { color: theme.textSecondary }]}>
+                Sends alert with your location to all emergency contacts
+              </Text>
+            </GlassCard>
 
-        {/* Add Contact Button */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setIsModalVisible(true)}
-          >
-            <Ionicons name="add-circle" size={24} color="#3498db" />
-            <Text style={styles.addButtonText}>Add Emergency Contact</Text>
-          </TouchableOpacity>
-        </View>
+            {/* Add Contact Button */}
+            <TouchableOpacity
+              style={[styles.addButton, { backgroundColor: theme.location }]}
+              onPress={() => setIsModalVisible(true)}
+            >
+              <Ionicons name="add-circle" size={24} color="#fff" />
+              <Text style={styles.addButtonText}>Add Emergency Contact</Text>
+            </TouchableOpacity>
 
-        {/* Contacts List */}
-        {contacts.length > 0 ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your Emergency Contacts</Text>
-            <View style={styles.contactsList}>
-              {contacts.map((contact) => (
-                <View key={contact.id} style={styles.contactCard}>
-                  <View style={styles.contactHeader}>
-                    <View style={styles.contactAvatar}>
-                      <Text style={styles.contactAvatarText}>
-                        {getContactInitials(contact.name)}
-                      </Text>
-                    </View>
-                    <View style={styles.contactInfo}>
-                      <Text style={styles.contactName}>{contact.name}</Text>
-                      <Text style={styles.contactPhone}>{contact.phone}</Text>
-                      <View style={[
-                        styles.relationshipBadge,
-                        { backgroundColor: getRelationshipColor(contact.relationship) }
-                      ]}>
-                        <Text style={styles.relationshipText}>
-                          {contact.relationship}
+            {/* Contacts List */}
+            {contacts.length > 0 ? (
+              <>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>Your Emergency Contacts</Text>
+                {contacts.map((contact) => (
+                  <GlassCard key={contact.id} style={styles.contactCard}>
+                    <View style={styles.contactHeader}>
+                      <View style={[styles.contactAvatar, { backgroundColor: getRelationshipColor(contact.relationship) }]}>
+                        <Text style={styles.contactAvatarText}>
+                          {getContactInitials(contact.name)}
                         </Text>
                       </View>
+                      <View style={styles.contactInfo}>
+                        <Text style={[styles.contactName, { color: theme.text }]}>
+                          {contact.name}
+                        </Text>
+                        <Text style={[styles.contactPhone, { color: theme.textSecondary }]}>
+                          {contact.phone}
+                        </Text>
+                        <View style={[styles.relationshipBadge, { backgroundColor: theme.surface }]}>
+                          <Text style={[styles.relationshipText, { color: theme.textSecondary }]}>
+                            {contact.relationship}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                    
+                    <View style={styles.contactActions}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: theme.surface }]}
+                        onPress={() => shareLocationWithContact(contact)}
+                      >
+                        <Ionicons name="location" size={16} color={theme.location} />
+                        <Text style={[styles.actionButtonText, { color: theme.text }]}>
+                          Share Location
+                        </Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.deleteButton, { backgroundColor: theme.surface }]}
+                        onPress={() => removeContact(contact.id)}
+                      >
+                        <Ionicons name="trash" size={16} color={theme.primary} />
+                        <Text style={[styles.actionButtonText, styles.deleteButtonText, { color: theme.primary }]}>
+                          Remove
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </GlassCard>
+                ))}
+              </>
+            ) : (
+              <GlassCard style={styles.emptyState}>
+                <View style={[styles.emptyIcon, { backgroundColor: theme.monitor }]}>
+                  <Ionicons name="people-outline" size={48} color="#fff" />
+                </View>
+                <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
+                  No Emergency Contacts
+                </Text>
+                <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
+                  Add emergency contacts to receive alerts when you need help
+                </Text>
+              </GlassCard>
+            )}
+
+            {/* Safety Tips */}
+            <GlassCard style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Safety Tips</Text>
+              <View style={styles.tipsContainer}>
+                <View style={styles.tipItem}>
+                  <View style={[styles.tipIcon, { backgroundColor: theme.hospital }]}>
+                    <Ionicons name="checkmark" size={16} color="#fff" />
+                  </View>
+                  <Text style={[styles.tipText, { color: theme.textSecondary }]}>
+                    Add family members and close friends
+                  </Text>
+                </View>
+                <View style={styles.tipItem}>
+                  <View style={[styles.tipIcon, { backgroundColor: theme.hospital }]}>
+                    <Ionicons name="checkmark" size={16} color="#fff" />
+                  </View>
+                  <Text style={[styles.tipText, { color: theme.textSecondary }]}>
+                    Include at least 3 emergency contacts
+                  </Text>
+                </View>
+                <View style={styles.tipItem}>
+                  <View style={[styles.tipIcon, { backgroundColor: theme.hospital }]}>
+                    <Ionicons name="checkmark" size={16} color="#fff" />
+                  </View>
+                  <Text style={[styles.tipText, { color: theme.textSecondary }]}>
+                    Verify phone numbers are correct
+                  </Text>
+                </View>
+              </View>
+            </GlassCard>
+          </View>
+        </ScrollView>
+
+        {/* Add Contact Modal */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={isModalVisible}
+          onRequestClose={() => setIsModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <LinearGradient colors={theme.backgroundGradient} style={styles.modalContainer}>
+              <GlassCard style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={[styles.modalTitle, { color: theme.text }]}>
+                    Add Emergency Contact
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.closeButton}
+                    onPress={() => setIsModalVisible(false)}
+                  >
+                    <Ionicons name="close" size={24} color={theme.text} />
+                  </TouchableOpacity>
+                </View>
+                
+                <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, { color: theme.text }]}>Full Name *</Text>
+                    <TextInput
+                      style={[styles.input, { 
+                        backgroundColor: theme.surface,
+                        color: theme.text,
+                        borderColor: theme.borderGlass,
+                      }]}
+                      value={newContact.name}
+                      onChangeText={(text) => setNewContact({...newContact, name: text})}
+                      placeholder="Enter full name"
+                      placeholderTextColor={theme.textSecondary}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, { color: theme.text }]}>Phone Number *</Text>
+                    <TextInput
+                      style={[styles.input, { 
+                        backgroundColor: theme.surface,
+                        color: theme.text,
+                        borderColor: theme.borderGlass,
+                      }]}
+                      value={newContact.phone}
+                      onChangeText={(text) => setNewContact({...newContact, phone: text})}
+                      placeholder="Enter phone number"
+                      placeholderTextColor={theme.textSecondary}
+                      keyboardType="phone-pad"
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={[styles.inputLabel, { color: theme.text }]}>Relationship</Text>
+                    <View style={styles.relationshipButtons}>
+                      {['Family', 'Friend', 'Doctor', 'Neighbor', 'Emergency Contact'].map((rel) => (
+                        <TouchableOpacity
+                          key={rel}
+                          style={[
+                            styles.relationshipButton,
+                            { 
+                              backgroundColor: newContact.relationship === rel ? theme.primary : theme.surface,
+                              borderColor: theme.borderGlass,
+                            }
+                          ]}
+                          onPress={() => setNewContact({...newContact, relationship: rel})}
+                        >
+                          <Text style={[
+                            styles.relationshipButtonText,
+                            { 
+                              color: newContact.relationship === rel ? '#fff' : theme.text,
+                            }
+                          ]}>
+                            {rel}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
                     </View>
                   </View>
-                  
-                  <View style={styles.contactActions}>
-                    <TouchableOpacity
-                      style={styles.actionButton}
-                      onPress={() => shareLocationWithContact(contact)}
-                    >
-                      <Ionicons name="location" size={16} color="#3498db" />
-                      <Text style={styles.actionButtonText}>Share Location</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      style={[styles.actionButton, styles.deleteButton]}
-                      onPress={() => removeContact(contact.id)}
-                    >
-                      <Ionicons name="trash" size={16} color="#e74c3c" />
-                      <Text style={[styles.actionButtonText, styles.deleteButtonText]}>
-                        Remove
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
+                </ScrollView>
+
+                <View style={styles.modalFooter}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.cancelButton, { backgroundColor: theme.surface }]}
+                    onPress={() => setIsModalVisible(false)}
+                  >
+                    <Text style={[styles.cancelButtonText, { color: theme.text }]}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.saveButton, { backgroundColor: theme.primary }]}
+                    onPress={addContact}
+                  >
+                    <Text style={styles.saveButtonText}>Add Contact</Text>
+                  </TouchableOpacity>
                 </View>
-              ))}
-            </View>
+              </GlassCard>
+            </LinearGradient>
           </View>
-        ) : (
-          <View style={styles.emptyState}>
-            <Ionicons name="people-outline" size={80} color="#bdc3c7" />
-            <Text style={styles.emptyStateTitle}>No Emergency Contacts</Text>
-            <Text style={styles.emptyStateText}>
-              Add emergency contacts to receive alerts when you need help
-            </Text>
-          </View>
-        )}
-
-        {/* Safety Tips */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Safety Tips</Text>
-          <View style={styles.tipsContainer}>
-            <View style={styles.tipItem}>
-              <Ionicons name="checkmark-circle" size={16} color="#2ecc71" />
-              <Text style={styles.tipText}>Add family members and close friends</Text>
-            </View>
-            <View style={styles.tipItem}>
-              <Ionicons name="checkmark-circle" size={16} color="#2ecc71" />
-              <Text style={styles.tipText}>Include at least 3 emergency contacts</Text>
-            </View>
-            <View style={styles.tipItem}>
-              <Ionicons name="checkmark-circle" size={16} color="#2ecc71" />
-              <Text style={styles.tipText}>Verify phone numbers are correct</Text>
-            </View>
-          </View>
-        </View>
-      </ScrollView>
-
-      {/* Add Contact Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={isModalVisible}
-        onRequestClose={() => setIsModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Emergency Contact</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setIsModalVisible(false)}
-              >
-                <Ionicons name="close" size={24} color="#7f8c8d" />
-              </TouchableOpacity>
-            </View>
-            
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Full Name *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={newContact.name}
-                  onChangeText={(text) => setNewContact({...newContact, name: text})}
-                  placeholder="Enter full name"
-                  placeholderTextColor="#bdc3c7"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Phone Number *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={newContact.phone}
-                  onChangeText={(text) => setNewContact({...newContact, phone: text})}
-                  placeholder="Enter phone number"
-                  placeholderTextColor="#bdc3c7"
-                  keyboardType="phone-pad"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Relationship</Text>
-                <View style={styles.relationshipButtons}>
-                  {['Family', 'Friend', 'Doctor', 'Neighbor', 'Emergency Contact'].map((rel) => (
-                    <TouchableOpacity
-                      key={rel}
-                      style={[
-                        styles.relationshipButton,
-                        newContact.relationship === rel && styles.relationshipButtonSelected
-                      ]}
-                      onPress={() => setNewContact({...newContact, relationship: rel})}
-                    >
-                      <Text style={[
-                        styles.relationshipButtonText,
-                        newContact.relationship === rel && styles.relationshipButtonTextSelected
-                      ]}>
-                        {rel}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setIsModalVisible(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={addContact}
-              >
-                <Text style={styles.saveButtonText}>Add Contact</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        </Modal>
+      </LinearGradient>
     </Screen>
   );
 }
@@ -439,60 +496,31 @@ export default function ContactsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    padding: 16,
   },
   header: {
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 16,
     marginBottom: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+  },
+  headerIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#2c3e50',
-    marginTop: 12,
     marginBottom: 4,
   },
   headerSubtitle: {
     fontSize: 16,
-    color: '#7f8c8d',
-  },
-  section: {
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 12,
-    padding: 20,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#2c3e50',
-    marginBottom: 16,
   },
   emergencyButton: {
     backgroundColor: '#e74c3c',
@@ -502,17 +530,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     marginBottom: 8,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#e74c3c',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
   },
   emergencyButtonDisabled: {
     backgroundColor: '#bdc3c7',
@@ -523,7 +540,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
   },
-  emergencyButtonSubtext: {
+  emergencyInfo: {
+    marginBottom: 8,
+  },
+  emergencyInfoText: {
     fontSize: 12,
     color: '#7f8c8d',
     textAlign: 'center',
@@ -545,6 +565,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  section: {
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 16,
   },
   contactsList: {
     gap: 12,
@@ -633,6 +661,14 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
     paddingHorizontal: 32,
   },
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   emptyStateTitle: {
     fontSize: 20,
     fontWeight: '600',
@@ -656,34 +692,51 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
   },
+  tipIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
   tipText: {
     fontSize: 14,
     color: '#2c3e50',
     marginLeft: 12,
     flex: 1,
   },
-  // Modal Styles
+  relationshipButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  relationshipButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  relationshipButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2c3e50',
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    flex: 1,
   },
   modalContent: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '80%',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 8,
-      },
-    }),
   },
   modalHeader: {
     flexDirection: 'row',
@@ -778,5 +831,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
   },
 }); 

@@ -200,39 +200,54 @@ export default function HomeScreen() {
       </View>
 
       {/* Blur Overlays for Toolbars */}
-      <BlurOverlay 
-        position="top" 
-        height={Platform.OS === 'ios' ? 100 : 80} 
-        backgroundColor={theme.card} 
-      />
-      <BlurOverlay 
-        position="bottom" 
-        height={88} 
-        backgroundColor={theme.card} 
-      />
+      <View style={{ zIndex: 500 }}>
+        <BlurOverlay 
+          position="top" 
+          height={Platform.OS === 'ios' ? 130 : 110} 
+          backgroundColor={theme.card} 
+        />
+      </View>
+      <View style={{ zIndex: 500 }}>
+        <BlurOverlay 
+          position="bottom" 
+          height={88} 
+          backgroundColor={theme.card} 
+        />
+      </View>
+
+      {/* Fixed Top Bar with Home Title and Time/Date */}
+      <View style={[styles.fixedTopBar, { 
+        backgroundColor: 'transparent',
+        zIndex: 1000, // Bring to front
+      }]}>
+        <View style={styles.topBarContent}>
+          <Text style={[styles.homeTitle, { color: theme.text }]}>
+            Home
+          </Text>
+          <View style={styles.timeDisplayContainer}>
+            <Text style={[styles.topBarTimeText, { color: theme.text }]}>
+              {formatTime()}
+            </Text>
+            <Text style={[styles.topBarDateText, { color: theme.textSecondary }]}>
+              {formatDate()}
+            </Text>
+          </View>
+        </View>
+      </View>
 
       <ScrollView 
         style={styles.container}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        scrollIndicatorInsets={{ top: 88, bottom: 83 }}
+        scrollIndicatorInsets={{ top: 120, bottom: 83 }}
         contentInsetAdjustmentBehavior="automatic"
         bounces={true}
       >
-        {/* Time and Date - Clean Top Display */}
-        <View style={styles.topTimeContainer}>
-          <Text style={[styles.topTimeText, { color: theme.text }]}>
-            {formatTime()}
-          </Text>
-          <Text style={[styles.topDateText, { color: theme.textSecondary }]}>
-            {formatDate()}
-          </Text>
-        </View>
 
-        {/* Floating Welcome Text - No Container */}
-        <View style={styles.floatingWelcomeContainer}>
+        {/* Welcome Content - starts after fixed top bar */}
+        <View style={styles.welcomeContainer}>
           <Text style={[styles.welcomeText, { color: theme.text }]}>
-            Hello, {userName}
+            Hello,
           </Text>
           <Text style={[styles.subtitleText, { color: theme.textSecondary }]}>
             Your safety is our priority. Stay protected.
@@ -257,27 +272,28 @@ export default function HomeScreen() {
             onPress={handleEmergencyAlert}
             activeOpacity={0.8}
           >
-            {/* Emergency button background */}
-            <View style={[styles.emergencyButtonBase, { 
-              backgroundColor: theme.contact,
+            {/* Primary button background */}
+            <View style={[StyleSheet.absoluteFillObject, { 
+              borderRadius: windowWidth * 0.35,
+              backgroundColor: theme.contact
             }]} />
             
             {/* Vibrant glass overlay effect for button pop */}
-            <View style={[styles.emergencyButtonOverlay, { 
+            <View style={[StyleSheet.absoluteFillObject, { 
+              borderRadius: windowWidth * 0.35,
               backgroundColor: 'rgba(255, 255, 255, 0.15)',
             }]} />
             
             {/* Inner highlight for depth */}
-            <View style={[styles.emergencyButtonHighlight, { 
-              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+            <View style={[StyleSheet.absoluteFillObject, { 
+              borderRadius: windowWidth * 0.35,
+              backgroundColor: 'rgba(255, 255, 255, 0.08)',
+              transform: [{ translateY: -2 }],
             }]} />
             
             <View style={styles.emergencyButtonContent}>
-              <Ionicons name="warning" size={52} color="#fff" />
+              <Ionicons name="warning" size={80} color="#fff" />
               <Text style={styles.emergencyButtonText}>
-                EMERGENCY
-              </Text>
-              <Text style={styles.emergencyButtonTextSecondary}>
                 SOS
               </Text>
               <Text style={styles.emergencySubtext}>
@@ -550,30 +566,53 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: Platform.OS === 'ios' ? 110 : 90,
+    paddingTop: Platform.OS === 'ios' ? 160 : 140, // Increased for larger fixed top bar
     paddingBottom: 120,
   },
-  // Time and Date - Clean Top Display
-  topTimeContainer: {
+  // Fixed Top Bar Styles
+  fixedTopBar: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 44 : 20, // Below status bar
+    left: 0,
+    right: 0,
+    zIndex: 1000, // Higher z-index to stay on top
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    elevation: 1000, // Android elevation
+  },
+  topBarContent: {
     alignItems: 'center',
-    marginBottom: 32,
+    justifyContent: 'center',
   },
-  topTimeText: {
-    fontSize: 32,
-    fontWeight: '300',
-    letterSpacing: -1,
+  homeTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 12,
+    textAlign: 'center',
   },
-  topDateText: {
-    fontSize: 16,
-    fontWeight: '500',
+  timeDisplayContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarTimeText: {
+    fontSize: 28, // Larger for better visibility
+    fontWeight: '700',
+    letterSpacing: -0.5,
+    textAlign: 'center',
+  },
+  topBarDateText: {
+    fontSize: 16, // Slightly larger
+    fontWeight: '600',
     marginTop: 4,
+    textAlign: 'center',
   },
-  // Floating welcome text - no container background
-  floatingWelcomeContainer: {
+  // Welcome Container
+  welcomeContainer: {
     alignItems: 'center',
-    marginHorizontal: 20,
     marginBottom: 32,
   },
+
+
   welcomeText: {
     fontSize: 32,
     fontWeight: '700',
@@ -607,9 +646,9 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   emergencyButton: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
+    width: windowWidth * 0.7,
+    height: windowWidth * 0.7,
+    borderRadius: windowWidth * 0.35,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -618,60 +657,30 @@ const styles = StyleSheet.create({
         shadowColor: '#E67E62',
         shadowOffset: { width: 0, height: 12 },
         shadowOpacity: 0.4,
-        shadowRadius: 20,
+        shadowRadius: 24,
       },
       android: {
         elevation: 16,
       },
     }),
   },
-  emergencyButtonBase: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 90,
-  },
-  emergencyButtonOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 90,
-  },
-  emergencyButtonHighlight: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 90,
-  },
+
   emergencyButtonContent: {
     alignItems: 'center',
     zIndex: 1,
   },
   emergencyButtonText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 36,
     fontWeight: '800',
-    marginTop: 8,
-    letterSpacing: 1.5,
-  },
-  emergencyButtonTextSecondary: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: '800',
+    marginTop: 16,
     letterSpacing: 2,
-    marginTop: 2,
   },
   emergencySubtext: {
     color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '500',
-    marginTop: 6,
+    marginTop: 8,
   },
   // Compact info section
   infoContainer: {
@@ -705,57 +714,65 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
   },
   quickActionsSolidBar: {
-    height: 100,
-    borderRadius: 12,
+    height: 110, // Slightly taller like Control Center
+    borderRadius: 16, // Larger border radius
     overflow: 'hidden',
     marginHorizontal: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)', // Strong glass effect
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.25,
+    shadowRadius: 40,
+    elevation: 20,
   },
   quickActionsScrollView: {
     flex: 1,
   },
   quickActionsCarousel: {
     paddingHorizontal: 16,
-    height: 100,
+    height: 110, // Match the bar height
     alignItems: 'center',
   },
   quickActionItem: {
-    marginRight: 16,
-    height: 100,
+    marginRight: 20, // More spacing like Control Center
+    height: 110,
     justifyContent: 'center',
-    width: 80,
+    width: 85, // Slightly wider
   },
   quickActionBarItem: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,
-    height: 100,
-    width: 80,
+    height: 110,
+    width: 85,
   },
   quickActionBarIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48, // Larger icons like Control Center
+    height: 48,
+    borderRadius: 14, // Larger border radius like Control Center
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
       },
       android: {
-        elevation: 4,
+        elevation: 6,
       },
     }),
   },
   quickActionBarTitle: {
-    fontSize: 12,
+    fontSize: 13, // Slightly larger text
     fontWeight: '600',
     textAlign: 'center',
-    lineHeight: 14,
-    width: 64,
+    lineHeight: 16,
+    width: 75,
   },
   activityCard: {
     marginHorizontal: 20,

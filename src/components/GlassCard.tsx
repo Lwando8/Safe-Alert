@@ -33,10 +33,12 @@ export default function GlassCard({
     {
       borderRadius,
       margin,
-      backgroundColor: theme.surface,
-      shadowColor: isDark ? theme.shadowStrong : theme.shadow,
-      borderColor: theme.liquidBorder,
-      borderWidth: 1,
+      backgroundColor: theme.surfaceCard, // Use stronger glass effect
+      shadowColor: isDark ? '#000' : '#000',
+      borderColor: isDark 
+        ? 'rgba(255, 255, 255, 0.15)' 
+        : 'rgba(255, 255, 255, 0.4)',
+      borderWidth: 1.5, // Thicker border like Control Center
     },
     style,
   ];
@@ -51,42 +53,42 @@ export default function GlassCard({
 
   return (
     <View style={containerStyle}>
-      {/* Primary glass effect layer */}
+      {/* Control Center style glass blur effect */}
       <View 
         style={[
           StyleSheet.absoluteFillObject, 
           { 
             borderRadius,
-            backgroundColor: theme.liquidGlass,
+            backgroundColor: theme.frostedGlass,
           }
         ]} 
       />
       
-      {/* Secondary highlight layer for depth */}
+      {/* Control Center style highlight layer */}
       <View 
         style={[
-          StyleSheet.absoluteFillObject, 
+          styles.highlightLayer,
           { 
-            borderRadius,
+            borderTopLeftRadius: borderRadius,
+            borderTopRightRadius: borderRadius,
             backgroundColor: isDark 
-              ? 'rgba(255, 255, 255, 0.05)' 
-              : 'rgba(255, 255, 255, 0.2)',
-            transform: [{ translateY: -1 }],
+              ? 'rgba(255, 255, 255, 0.08)' 
+              : 'rgba(255, 255, 255, 0.3)',
           }
         ]} 
       />
       
-      {/* Inner glow effect */}
+      {/* Control Center style inner border glow */}
       <View 
         style={[
           StyleSheet.absoluteFillObject, 
           { 
-            borderRadius: borderRadius - 1,
+            borderRadius: borderRadius - 2,
             borderWidth: 1,
             borderColor: isDark 
-              ? 'rgba(255, 255, 255, 0.1)' 
-              : 'rgba(255, 255, 255, 0.5)',
-            margin: 1,
+              ? 'rgba(255, 255, 255, 0.2)' 
+              : 'rgba(255, 255, 255, 0.6)',
+            margin: 2,
           }
         ]} 
       />
@@ -105,18 +107,25 @@ const styles = StyleSheet.create({
       ios: {
         shadowOffset: {
           width: 0,
-          height: 8,
+          height: 16, // Stronger shadow like Control Center
         },
-        shadowOpacity: 0.15,
-        shadowRadius: 24,
+        shadowOpacity: 0.25,
+        shadowRadius: 40,
       },
       android: {
-        elevation: 12,
+        elevation: 20,
       },
     }),
   },
   content: {
     overflow: 'hidden',
     zIndex: 10,
+  },
+  highlightLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '35%', // Control Center style highlight
   },
 }); 

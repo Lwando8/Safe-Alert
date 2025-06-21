@@ -343,7 +343,7 @@ export default function AlertScreen() {
               style={[
                 styles.sosButton,
                 { 
-                  backgroundColor: isEmergencyActive ? theme.contact : theme.primary,
+                  backgroundColor: isEmergencyActive ? theme.contactActive : theme.contact,
                   opacity: isEmergencyActive ? 0.8 : 1
                 }
               ]}
@@ -354,7 +354,7 @@ export default function AlertScreen() {
               {/* Primary button background */}
               <View style={[StyleSheet.absoluteFillObject, { 
                 borderRadius: windowWidth * 0.35,
-                backgroundColor: isEmergencyActive ? theme.contact : theme.primary
+                backgroundColor: isEmergencyActive ? theme.contactActive : theme.contact
               }]} />
               
               {/* Vibrant glass overlay effect for button pop */}

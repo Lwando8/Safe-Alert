@@ -14,11 +14,27 @@ import {
   Modal,
   TextInput,
   FlatList,
+  Dimensions,
 } from 'react-native';
+// LinearGradient fallback handling
+let LinearGradient;
+try {
+  LinearGradient = require('expo-linear-gradient').LinearGradient;
+} catch (error) {
+  LinearGradient = View; // Fallback to View if expo-linear-gradient is not available
+}
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+
+// Components
+import Screen from '../components/Screen';
+import GlassCard from '../components/GlassCard';
+import BlurOverlay from '../components/BlurOverlay';
+import { useTheme } from '../context/ThemeContext';
+
+const { width: windowWidth } = Dimensions.get('window');
 
 interface EmergencyContact {
   id: string;
@@ -47,6 +63,7 @@ interface PhoneContact {
 }
 
 const MyCommunityScreen = () => {
+  const { theme, isDark } = useTheme();
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
   const [contactLocations, setContactLocations] = useState<ContactLocation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -428,34 +445,68 @@ const MyCommunityScreen = () => {
 
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3498db" />
-        <Text style={styles.loadingText}>Loading your community...</Text>
-      </View>
+      <Screen>
+        <StatusBar 
+          barStyle={isDark ? 'light-content' : 'dark-content'} 
+          backgroundColor="transparent"
+          translucent
+        />
+        <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.text }]}>Loading your community...</Text>
+        </View>
+      </Screen>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f8f9fa" />
+    <Screen>
+      <StatusBar 
+        barStyle={isDark ? 'light-content' : 'dark-content'} 
+        backgroundColor="transparent"
+        translucent
+      />
+      
+      {/* Background Gradient */}
+      <View style={[styles.gradientBackground, { backgroundColor: theme.background }]}>
+        <View style={[styles.gradientOverlay, { 
+          backgroundColor: isDark 
+            ? 'rgba(99, 102, 241, 0.1)' 
+            : 'rgba(139, 69, 19, 0.05)' 
+        }]} />
+      </View>
+
+      {/* Blur Overlays for Toolbars */}
+      <BlurOverlay 
+        position="top" 
+        height={Platform.OS === 'ios' ? 130 : 110} 
+        backgroundColor={theme.card} 
+      />
+      <BlurOverlay 
+        position="bottom" 
+        height={88} 
+        backgroundColor={theme.card} 
+      />
       
       {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.headerTitle}>My Community</Text>
-            <Text style={styles.headerSubtitle}>
-              {contactLocations.filter(c => c.status === 'sharing').length} of {contacts.length} sharing live location
-            </Text>
+      <View style={[styles.header, { backgroundColor: 'transparent' }]}>
+        <GlassCard intensity={20} style={styles.headerCard}>
+          <View style={styles.headerContent}>
+            <View style={styles.headerLeft}>
+              <Text style={[styles.headerTitle, { color: theme.text }]}>My Community</Text>
+              <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+                {contactLocations.filter(c => c.status === 'sharing').length} of {contacts.length} sharing live location
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.shareButton, { backgroundColor: theme.primary }]}
+              onPress={shareMyLocation}
+            >
+              <Ionicons name="location" size={20} color="#fff" />
+              <Text style={styles.shareButtonText}>Share</Text>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.shareButton}
-            onPress={shareMyLocation}
-          >
-            <Ionicons name="location" size={20} color="#fff" />
-            <Text style={styles.shareButtonText}>Share</Text>
-          </TouchableOpacity>
-        </View>
+        </GlassCard>
       </View>
 
       <ScrollView
@@ -471,20 +522,22 @@ const MyCommunityScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         {contacts.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="people-outline" size={80} color="#bdc3c7" />
-            <Text style={styles.emptyStateTitle}>No Community Members</Text>
-            <Text style={styles.emptyStateText}>
-              Add emergency contacts to see them in your community and share locations with each other.
-            </Text>
-            <TouchableOpacity
-              style={styles.addContactsButton}
-              onPress={openContactImportModal}
-            >
-              <Ionicons name="add" size={20} color="#fff" />
-              <Text style={styles.addContactsButtonText}>Add Emergency Contacts</Text>
-            </TouchableOpacity>
-          </View>
+          <GlassCard style={styles.emptyStateCard}>
+            <View style={styles.emptyState}>
+              <Ionicons name="people-outline" size={80} color={theme.textSecondary} />
+              <Text style={[styles.emptyStateTitle, { color: theme.text }]}>No Community Members</Text>
+              <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
+                Add emergency contacts to see them in your community and share locations with each other.
+              </Text>
+              <TouchableOpacity
+                style={[styles.addContactsButton, { backgroundColor: theme.primary }]}
+                onPress={openContactImportModal}
+              >
+                <Ionicons name="add" size={20} color="#fff" />
+                <Text style={styles.addContactsButtonText}>Add Emergency Contacts</Text>
+              </TouchableOpacity>
+            </View>
+          </GlassCard>
         ) : (
           <View style={styles.communityList}>
             {contacts.map((contact) => {
@@ -492,58 +545,60 @@ const MyCommunityScreen = () => {
               const statusInfo = locationData ? getStatusInfo(locationData.status) : getStatusInfo('not_sharing');
               
               return (
-                <TouchableOpacity
-                  key={contact.id}
-                  style={styles.contactCard}
-                  onPress={() => locationData ? openContactLocation(locationData) : requestLocationFromContact(contact)}
-                  onLongPress={() => removeEmergencyContact(contact.id)}
-                >
-                  <View style={styles.contactContent}>
-                    <View style={styles.contactLeft}>
-                      <View style={[
-                        styles.contactAvatar,
-                        { backgroundColor: getRelationshipColor(contact.relationship) }
-                      ]}>
-                        <Text style={styles.contactAvatarText}>
-                          {getContactInitials(contact.name)}
-                        </Text>
-                      </View>
-                      <View style={styles.contactInfo}>
-                        <Text style={styles.contactName}>{contact.name}</Text>
-                        <View style={styles.statusRow}>
-                          <Ionicons 
-                            name={statusInfo.icon as any} 
-                            size={12} 
-                            color={statusInfo.color} 
-                          />
-                          <Text style={[styles.statusText, { color: statusInfo.color }]}>
-                            {statusInfo.text}
+                <GlassCard key={contact.id} style={styles.contactCard}>
+                  <TouchableOpacity
+                    style={styles.contactTouchable}
+                    onPress={() => locationData ? openContactLocation(locationData) : requestLocationFromContact(contact)}
+                    onLongPress={() => removeEmergencyContact(contact.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.contactContent}>
+                      <View style={styles.contactLeft}>
+                        <View style={[
+                          styles.contactAvatar,
+                          { backgroundColor: getRelationshipColor(contact.relationship) }
+                        ]}>
+                          <Text style={styles.contactAvatarText}>
+                            {getContactInitials(contact.name)}
                           </Text>
-                          {locationData && locationData.status !== 'not_sharing' && (
-                            <Text style={styles.locationTime}>
-                              • {getLocationAge(locationData.location.timestamp)}
-                            </Text>
-                          )}
                         </View>
-                        <Text style={styles.relationshipText}>{contact.relationship}</Text>
+                        <View style={styles.contactInfo}>
+                          <Text style={[styles.contactName, { color: theme.text }]}>{contact.name}</Text>
+                          <View style={styles.statusRow}>
+                            <Ionicons 
+                              name={statusInfo.icon as any} 
+                              size={12} 
+                              color={statusInfo.color} 
+                            />
+                            <Text style={[styles.statusText, { color: statusInfo.color }]}>
+                              {statusInfo.text}
+                            </Text>
+                            {locationData && locationData.status !== 'not_sharing' && (
+                              <Text style={[styles.locationTime, { color: theme.textSecondary }]}>
+                                • {getLocationAge(locationData.location.timestamp)}
+                              </Text>
+                            )}
+                          </View>
+                          <Text style={[styles.relationshipText, { color: theme.textSecondary }]}>{contact.relationship}</Text>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.contactRight}>
+                        {locationData && locationData.status === 'sharing' && locationData.battery && (
+                          <View style={styles.batteryContainer}>
+                            <Ionicons 
+                              name="battery-half" 
+                              size={16} 
+                              color={locationData.battery > 20 ? theme.location : theme.contact} 
+                            />
+                            <Text style={[styles.batteryText, { color: theme.textSecondary }]}>{locationData.battery}%</Text>
+                          </View>
+                        )}
+                        <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
                       </View>
                     </View>
-                    
-                    <View style={styles.contactRight}>
-                      {locationData && locationData.status === 'sharing' && locationData.battery && (
-                        <View style={styles.batteryContainer}>
-                          <Ionicons 
-                            name="battery-half" 
-                            size={16} 
-                            color={locationData.battery > 20 ? '#2ecc71' : '#e74c3c'} 
-                          />
-                          <Text style={styles.batteryText}>{locationData.battery}%</Text>
-                        </View>
-                      )}
-                      <Ionicons name="chevron-forward" size={20} color="#bdc3c7" />
-                    </View>
-                  </View>
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                </GlassCard>
               );
             })}
           </View>
@@ -561,23 +616,23 @@ const MyCommunityScreen = () => {
 
         {/* Safety Tips */}
         {contacts.length > 0 && (
-          <View style={styles.tipsSection}>
-            <Text style={styles.tipsSectionTitle}>Location Sharing Tips</Text>
+          <GlassCard style={styles.tipsSection}>
+            <Text style={[styles.tipsSectionTitle, { color: theme.text }]}>Location Sharing Tips</Text>
             <View style={styles.tipsContainer}>
               <View style={styles.tipItem}>
-                <Ionicons name="shield-checkmark" size={16} color="#2ecc71" />
-                <Text style={styles.tipText}>Location sharing is end-to-end encrypted</Text>
+                <Ionicons name="shield-checkmark" size={16} color={theme.location} />
+                <Text style={[styles.tipText, { color: theme.textSecondary }]}>Location sharing is end-to-end encrypted</Text>
               </View>
               <View style={styles.tipItem}>
-                <Ionicons name="time" size={16} color="#3498db" />
-                <Text style={styles.tipText}>Shared locations expire after 24 hours</Text>
+                <Ionicons name="time" size={16} color={theme.primary} />
+                <Text style={[styles.tipText, { color: theme.textSecondary }]}>Shared locations expire after 24 hours</Text>
               </View>
               <View style={styles.tipItem}>
-                <Ionicons name="settings" size={16} color="#f39c12" />
-                <Text style={styles.tipText}>You can stop sharing anytime in settings</Text>
+                <Ionicons name="settings" size={16} color={theme.textSecondary} />
+                <Text style={[styles.tipText, { color: theme.textSecondary }]}>You can stop sharing anytime in settings</Text>
               </View>
             </View>
-          </View>
+          </GlassCard>
         )}
       </ScrollView>
 
@@ -669,7 +724,7 @@ const MyCommunityScreen = () => {
       </Modal>
 
       {/* Simplified - No contact import modal needed */}
-    </View>
+    </Screen>
   );
 };
 
@@ -677,6 +732,21 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa',
+  },
+  // Glass morphism background styles
+  gradientBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  gradientOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   loadingContainer: {
     flex: 1,
@@ -690,19 +760,18 @@ const styles = StyleSheet.create({
     color: '#7f8c8d',
   },
   header: {
-    backgroundColor: '#fff',
-    paddingTop: Platform.OS === 'ios' ? 44 : 0,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 44 : 20,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
+  },
+  headerCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   headerContent: {
     flexDirection: 'row',
@@ -751,13 +820,17 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+    paddingTop: Platform.OS === 'ios' ? 130 : 110, // Account for fixed header
   },
   emptyState: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
-    paddingTop: 100,
+    paddingVertical: 60,
+  },
+  emptyStateCard: {
+    marginHorizontal: 16,
+    marginTop: 40,
   },
   emptyStateTitle: {
     fontSize: 22,
@@ -803,21 +876,12 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   contactCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    marginHorizontal: 16,
     marginBottom: 12,
+  },
+  contactTouchable: {
     padding: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+    borderRadius: 16,
   },
   contactContent: {
     flexDirection: 'row',

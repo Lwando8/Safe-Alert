@@ -1,15 +1,15 @@
 export const lightTheme = {
-  // Background colors - iOS 26 Muted Aesthetic
+  // Background colors - iOS Control Center Glass Aesthetic
   background: '#f5f5f7', // Soft neutral background
   backgroundSecondary: '#fafafa',
-  surface: 'rgba(255, 255, 255, 0.35)', // Much more muted for iOS 26 style
-  surfaceCard: 'rgba(255, 255, 255, 0.25)', // Very subtle glass cards
-  card: 'rgba(255, 255, 255, 0.25)', // More translucent for bars
+  surface: 'rgba(255, 255, 255, 0.75)', // Strong glass effect like Control Center
+  surfaceCard: 'rgba(255, 255, 255, 0.85)', // More opaque glass cards
+  card: 'rgba(255, 255, 255, 0.8)', // Strong translucent bars
   
-  // Muted glass overlay effects
-  glassOverlay: 'rgba(255, 255, 255, 0.08)', // Very subtle for muted look
-  glassBlur: 'rgba(255, 255, 255, 0.04)', // Extremely subtle blur
-  frostedGlass: 'rgba(255, 255, 255, 0.2)', // Muted frost
+  // Control Center glass overlay effects
+  glassOverlay: 'rgba(255, 255, 255, 0.25)', // Strong glass overlay
+  glassBlur: 'rgba(255, 255, 255, 0.15)', // Prominent blur effect
+  frostedGlass: 'rgba(255, 255, 255, 0.6)', // Strong frost effect
   
   // Text colors with enhanced contrast for readability
   text: '#1d1d1f', // Apple's refined black
@@ -37,8 +37,11 @@ export const lightTheme = {
   securityGlass: 'rgba(0, 122, 255, 0.8)', // Keep button backgrounds opaque
   location: '#32d74b', // Active green - keep vibrant
   locationGlass: 'rgba(50, 215, 75, 0.8)', // Keep button backgrounds opaque
-  contact: '#DC143C', // Scarlet red - vibrant for SOS
-  contactGlass: 'rgba(220, 20, 60, 0.8)', // Scarlet red with opacity
+  
+  // SOS Button - Vibrant Red to match app icon (updated)
+  contact: '#E53935', // Material Design Red 600 - vibrant red like app icon
+  contactGlass: 'rgba(229, 57, 53, 0.9)', // High opacity for strong SOS button
+  contactActive: '#C62828', // Darker red for pressed state
   
   // Sky blue for contacts
   skyBlue: '#87CEEB', // Sky blue
@@ -68,17 +71,17 @@ export const lightTheme = {
 };
 
 export const darkTheme = {
-  // Background colors - iOS 26 Dark Muted Aesthetic
+  // Background colors - iOS Control Center Dark Glass Aesthetic
   background: '#000000', // Pure black for OLED
   backgroundSecondary: '#0a0a0a',
-  surface: 'rgba(28, 28, 30, 0.35)', // Much more muted dark glass
-  surfaceCard: 'rgba(44, 44, 46, 0.25)', // Very subtle dark glass cards
-  card: 'rgba(28, 28, 30, 0.25)', // More translucent for bars
+  surface: 'rgba(28, 28, 30, 0.75)', // Strong dark glass effect
+  surfaceCard: 'rgba(44, 44, 46, 0.85)', // More opaque dark glass cards
+  card: 'rgba(28, 28, 30, 0.8)', // Strong translucent dark bars
   
-  // Muted dark glass overlay effects
-  glassOverlay: 'rgba(255, 255, 255, 0.04)', // Very subtle for muted look
-  glassBlur: 'rgba(255, 255, 255, 0.02)', // Extremely subtle blur
-  frostedGlass: 'rgba(28, 28, 30, 0.2)', // Muted frost
+  // Control Center dark glass overlay effects
+  glassOverlay: 'rgba(255, 255, 255, 0.15)', // Strong glass overlay for dark
+  glassBlur: 'rgba(255, 255, 255, 0.08)', // Prominent blur effect for dark
+  frostedGlass: 'rgba(28, 28, 30, 0.6)', // Strong dark frost effect
   
   // Text colors for dark mode
   text: '#f2f2f7', // Apple's refined white
@@ -106,8 +109,11 @@ export const darkTheme = {
   securityGlass: 'rgba(10, 132, 255, 0.8)', // Keep button backgrounds opaque
   location: '#32d74b', // Keep vibrant
   locationGlass: 'rgba(50, 215, 75, 0.8)', // Keep button backgrounds opaque
-  contact: '#FF6347', // Tomato red for dark mode - vibrant for SOS
-  contactGlass: 'rgba(255, 99, 71, 0.8)', // Tomato red with opacity
+  
+  // SOS Button - Vibrant Red to match app icon (dark mode, updated)
+  contact: '#F44336', // Slightly brighter red for dark mode visibility
+  contactGlass: 'rgba(244, 67, 54, 0.9)', // High opacity for strong SOS button
+  contactActive: '#E53935', // Red 600 for pressed state
   
   // Sky blue for contacts (dark mode)
   skyBlue: '#87CEEB', // Sky blue
