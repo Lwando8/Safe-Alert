@@ -18,7 +18,6 @@
     "expo": "^53.0.9",
     "expo-av": "^15.1.4",
     "expo-constants": "~17.1.6",
-    "expo-contacts": "~14.2.5",
     "expo-dev-client": "~5.2.0",
     "expo-device": "~7.1.4",
     "expo-location": "~18.1.5",

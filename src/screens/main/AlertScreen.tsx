@@ -8,15 +8,21 @@ import {
   Vibration,
   ActivityIndicator,
   Platform,
+  StatusBar,
+  Dimensions,
 } from 'react-native';
+
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Screen from '../../components/Screen';
+import GlassCard from '../../components/GlassCard';
 import EmergencyService from '../../services/EmergencyService';
 import AudioRecordingService from '../../services/AudioRecordingService';
 import NotificationService from '../../services/NotificationService';
 import { useHardwareButtons } from '../../services/HardwareButtonService';
+import { useTheme } from '../../context/ThemeContext';
+
+const windowWidth = Dimensions.get('window').width;
 
 interface EmergencyContact {
   id: string;
@@ -26,6 +32,7 @@ interface EmergencyContact {
 }
 
 export default function AlertScreen() {
+  const { theme, isDark } = useTheme();
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [isEmergencyActive, setIsEmergencyActive] = useState(false);
   const [emergencyService] = useState(() => EmergencyService.getInstance());
@@ -108,20 +115,6 @@ export default function AlertScreen() {
     }
   };
 
-  const testNotificationSystem = async () => {
-    try {
-      await notificationService.testEmergencyNotification();
-      Alert.alert(
-        'Test Notification Sent',
-        'Check your notifications to see if the emergency alert system is working correctly.',
-        [{ text: 'OK' }]
-      );
-    } catch (error) {
-      console.error('Error testing notifications:', error);
-      Alert.alert('Error', 'Failed to send test notification');
-    }
-  };
-
   const getCurrentLocation = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -188,553 +181,481 @@ export default function AlertScreen() {
         'Critical Emergency - Police Required'
       );
 
-              // Show confirmation with assigned unit details and notification status
-        const notificationStatus = successCount > 0 
-          ? `\n🔔 Critical alerts sent to ${successCount} emergency contact(s)`
-          : contacts.length > 0 
-          ? '\n🔔 Emergency notifications attempted'
-          : '\n⚠️ No emergency contacts configured';
+      // Send emergency notifications to contacts
+      const successCount = await sendEmergencyNotifications('Critical SOS Alert');
 
-        Alert.alert(
-          '🚨 SOS ALERT SENT',
-          `Emergency alert dispatched!\n\nAssigned Unit: ${emergencyAlert.assignedUnit?.badge}\nOfficer: ${emergencyAlert.assignedUnit?.name}\nETA: ${emergencyAlert.assignedUnit?.eta} minutes\n\n🎙️ Audio recording active for evidence.${notificationStatus}\n\nStay safe and wait for assistance.`,
-          [{ text: 'OK' }]
-        );
+      // Show confirmation with assigned unit details and notification status
+      const notificationStatus = successCount > 0 
+        ? `\n🔔 Critical alerts sent to ${successCount} emergency contact(s)`
+        : contacts.length > 0 
+        ? '\n🔔 Emergency notifications attempted'
+        : '\n⚠️ No emergency contacts configured';
 
-              // Send critical push notifications to emergency contacts
-        const successCount = await sendEmergencyNotifications('SOS Police Alert');
-        console.log(`${successCount} emergency notifications sent successfully`);
+      Alert.alert(
+        '🚨 SOS ALERT SENT',
+        `Emergency alert dispatched!\n\nAssigned Unit: ${emergencyAlert.assignedUnit?.badge}\nOfficer: ${emergencyAlert.assignedUnit?.name}\nETA: ${emergencyAlert.assignedUnit?.eta} minutes\n\n🎙️ Audio recording active for evidence.${notificationStatus}\n\nStay safe and wait for assistance.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setIsEmergencyActive(false);
+              setIsRecording(false);
+            }
+          }
+        ]
+      );
 
     } catch (error) {
-      console.error('Error triggering SOS alert:', error);
-      Alert.alert('Error', 'Failed to send SOS alert. Please try again or call emergency services directly.');
-    } finally {
+      console.error('Error sending SOS alert:', error);
+      Alert.alert('Error', 'Failed to send SOS alert');
+      setIsEmergencyActive(false);
+      setIsRecording(false);
+    }
+  };
+
+  const triggerDirectSOS = async () => {
+    try {
+      console.log('Direct SOS triggered via hardware buttons - bypassing confirmation');
+      
+      // Direct SOS without confirmation dialog
+      setIsEmergencyActive(true);
+      setIsRecording(true);
+      
+      // Heavy vibration pattern for direct SOS
+      Vibration.vibrate([0, 1000, 500, 1000, 500, 1000]);
+
+      if (!location) {
+        await getCurrentLocation();
+      }
+
+      if (location) {
+        const emergencyAlert = await emergencyService.sendSOSAlert(
+          {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          },
+          'DIRECT SOS - Hardware Button Emergency'
+        );
+
+        const successCount = await sendEmergencyNotifications('DIRECT SOS - Hardware Activation');
+
+        // Brief success notification for direct SOS
+        Alert.alert(
+          '🚨 DIRECT SOS SENT',
+          `Emergency services notified!\nUnit: ${emergencyAlert.assignedUnit?.badge}\nETA: ${emergencyAlert.assignedUnit?.eta} min`,
+          [{ text: 'OK', onPress: () => setIsEmergencyActive(false) }]
+        );
+      }
+
+    } catch (error) {
+      console.error('Error in direct SOS:', error);
       setIsEmergencyActive(false);
     }
   };
 
   const handleEmergencyType = async (type: 'hospital' | 'security' | 'fire') => {
-    try {
-      if (!location) {
-        await getCurrentLocation();
-      }
+    if (isEmergencyActive) return;
 
-      if (!location) {
-        Alert.alert('Error', 'Unable to get location for emergency services');
-        return;
-      }
+    const typeLabels = {
+      hospital: '🏥 Medical Emergency',
+      security: '🛡️ Security Emergency', 
+      fire: '🔥 Fire Emergency'
+    };
 
-      const emergencyTypes = {
-        hospital: 'Medical Emergency',
-        security: 'Security Emergency', 
-        fire: 'Fire Emergency',
-      };
-
-      Alert.alert(
-        `${emergencyTypes[type]}`,
-        'Send critical alert to emergency contacts?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Send Alert',
-            style: 'destructive',
-            onPress: async () => {
-              // Start audio recording for security alerts
-              if (type === 'security') {
-                setIsRecording(true);
-                const recordingResult = await audioService.startEmergencyRecording('security');
-                if (recordingResult) {
-                  console.log('Emergency audio recording started for security alert');
-                }
+    Alert.alert(
+      typeLabels[type],
+      `This will send a ${type} emergency alert. Continue?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send Alert',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsEmergencyActive(true);
+              
+              if (!location) {
+                await getCurrentLocation();
               }
 
-              // Send critical push notifications to emergency contacts
-              const successCount = await sendEmergencyNotifications(emergencyTypes[type]);
-
-              // Also send through emergency service for logging
-              await emergencyService.sendEmergencyContactAlert(
-                [],
-                emergencyTypes[type],
-                {
+              const emergencyAlert = await emergencyService.sendSpecializedAlert(
+                type,
+                location ? {
                   latitude: location.coords.latitude,
                   longitude: location.coords.longitude,
-                }
+                } : undefined,
+                `${typeLabels[type]} - Immediate Response Required`
               );
 
-              const notificationMessage = successCount > 0 
-                ? `${emergencyTypes[type]} critical alerts sent to ${successCount} contact(s)${type === 'security' ? '\n\n🎙️ Audio recording active for evidence.' : ''}`
-                : `${emergencyTypes[type]} alert sent to your emergency contacts${type === 'security' ? '\n\n🎙️ Audio recording active for evidence.' : ''}`;
+              const successCount = await sendEmergencyNotifications(`${typeLabels[type]}`);
 
-              Alert.alert('Alert Sent', notificationMessage);
-            },
+              Alert.alert(
+                '✅ Emergency Alert Sent',
+                `${typeLabels[type]} alert dispatched!\n\nResponse Team: ${emergencyAlert.responseTeam}\nETA: ${emergencyAlert.eta} minutes\n\nNotifications sent to ${successCount} contact(s).`,
+                [{ text: 'OK', onPress: () => setIsEmergencyActive(false) }]
+              );
+
+            } catch (error) {
+              console.error(`Error sending ${type} alert:`, error);
+              Alert.alert('Error', `Failed to send ${type} emergency alert`);
+              setIsEmergencyActive(false);
+            }
           },
-        ]
-      );
-    } catch (error) {
-      console.error(`Error handling ${type} emergency:`, error);
-      Alert.alert('Error', 'Failed to send emergency alert');
-    }
-  };
-
-  const showHardwareInfo = () => {
-    const info = getHardwareInfo();
-    Alert.alert(
-      'Emergency Hardware Shortcut',
-      info,
-      [{ text: 'OK' }]
+        },
+      ]
     );
   };
 
-  const triggerDirectSOS = async () => {
-    // Direct SOS without confirmation dialog (triggered by hardware buttons)
-    try {
-      console.log('DIRECT SOS TRIGGERED - Hardware Button Emergency');
-      Vibration.vibrate([0, 1000, 500, 1000]); // Strong vibration pattern
-      await triggerSOSAlert();
-    } catch (error) {
-      console.error('Error in direct SOS:', error);
-      Alert.alert('Emergency Error', 'Failed to trigger direct SOS. Please use the main SOS button.');
-    }
-  };
-
   return (
-    <Screen>
-      <View style={styles.container}>
-        {/* Emergency Header */}
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar 
+        barStyle={isDark ? 'light-content' : 'dark-content'} 
+        backgroundColor="transparent"
+        translucent
+      />
+      
+      {/* Background Gradient */}
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: theme.background }]}>
+        <View style={[StyleSheet.absoluteFillObject, { 
+          backgroundColor: isDark 
+            ? 'rgba(99, 102, 241, 0.1)' 
+            : 'rgba(139, 69, 19, 0.05)' 
+        }]} />
+      </View>
+
+      <View style={styles.content}>
+        {/* Header */}
         <View style={styles.header}>
-          <Ionicons name="warning" size={32} color="#e74c3c" />
-          <Text style={styles.title}>Emergency Alert</Text>
-          <Text style={styles.subtitle}>Press for immediate assistance</Text>
-        </View>
-
-        {/* Hardware Button Info */}
-        <TouchableOpacity style={styles.hardwareButtonInfo} onPress={showHardwareInfo}>
-          <Ionicons name="hardware-chip" size={20} color="#7f8c8d" />
-          <View style={styles.hardwareButtonTextContainer}>
-            <Text style={styles.hardwareButtonText}>
-              Emergency Shortcut: Power + Volume Down
+          <GlassCard style={styles.headerCard} padding={20} borderRadius={24}>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>
+              Emergency Alert
             </Text>
-            <Text style={styles.hardwareButtonSubtext}>
-              Tap for more information
+            <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+              {isEmergencyActive ? '🚨 Alert Active' : 'Ready for Emergency'}
             </Text>
-          </View>
-          <Ionicons name="information-circle" size={16} color="#3498db" />
-        </TouchableOpacity>
-
-        {/* Main Emergency Button */}
-        <View style={styles.emergencyButtonContainer}>
-          <TouchableOpacity
-            style={[
-              styles.emergencyButton,
-              isEmergencyActive && styles.emergencyButtonActive
-            ]}
-            onPress={handleMainEmergency}
-            disabled={isEmergencyActive}
-          >
-            {isEmergencyActive ? (
-              <ActivityIndicator size="large" color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="warning" size={60} color="#fff" />
-                <Text style={styles.emergencyButtonText}>SOS</Text>
-                <Text style={styles.emergencyButtonSubtext}>Police Dispatch</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          </GlassCard>
         </View>
 
-        {/* Location Status */}
-        <View style={styles.locationStatus}>
-          <Ionicons 
-            name={location ? "location" : "location-outline"} 
-            size={16} 
-            color={location ? "#2ecc71" : "#e74c3c"} 
-          />
-          <Text style={styles.locationText}>
-            {location ? 'Location: Ready' : 'Location: Getting position...'}
-          </Text>
-        </View>
-
-        {/* Recording Status */}
-        {isRecording && (
-          <View style={styles.recordingStatus}>
-            <Ionicons name="mic" size={16} color="#e74c3c" />
-            <Text style={styles.recordingText}>🎙️ Audio Recording Active</Text>
-            <View style={styles.recordingIndicator} />
-          </View>
-        )}
-
-        {/* Emergency Types */}
-        <View style={styles.emergencyTypesContainer}>
-          <Text style={styles.emergencyTypesTitle}>Other Emergency Services</Text>
-          <View style={styles.emergencyTypes}>
+        {/* Main SOS Button - Circular Design */}
+        <View style={styles.mainButtonContainer}>
+          <GlassCard style={styles.sosCard}>
             <TouchableOpacity
-              style={styles.emergencyTypeButton}
-              onPress={() => handleEmergencyType('hospital')}
+              style={[
+                styles.sosButton,
+                { 
+                  backgroundColor: isEmergencyActive ? theme.contact : theme.primary,
+                  opacity: isEmergencyActive ? 0.8 : 1
+                }
+              ]}
+              onPress={handleMainEmergency}
+              disabled={isEmergencyActive}
+              activeOpacity={0.8}
             >
-              <Ionicons name="medical" size={24} color="#2ecc71" />
-              <Text style={styles.emergencyTypeText}>Hospital</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.emergencyTypeButton}
-              onPress={() => handleEmergencyType('security')}
-            >
-              <Ionicons name="shield" size={24} color="#9b59b6" />
-              <Text style={styles.emergencyTypeText}>Security</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.emergencyTypeButton}
-              onPress={() => handleEmergencyType('fire')}
-            >
-              <Ionicons name="flame" size={24} color="#f39c12" />
-              <Text style={styles.emergencyTypeText}>Fire</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Test Buttons */}
-        <View style={styles.testButtonsContainer}>
-          <TouchableOpacity
-            style={styles.testButton}
-            onPress={simulateEmergency}
-          >
-            <Ionicons name="hardware-chip" size={16} color="#fff" />
-            <Text style={styles.testButtonText}>Test Hardware</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.testButton, styles.testNotificationButton]}
-            onPress={testNotificationSystem}
-          >
-            <Ionicons name="notifications" size={16} color="#fff" />
-            <Text style={styles.testButtonText}>Test Notifications</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Active Alerts Display */}
-        <View style={styles.activeAlerts}>
-          <Text style={styles.activeAlertsTitle}>Active Emergency Alerts</Text>
-          {emergencyService.getActiveAlerts().length > 0 ? (
-            emergencyService.getActiveAlerts().map((alert) => (
-              <View key={alert.id} style={styles.alertItem}>
-                <Ionicons name="radio-button-on" size={12} color="#e74c3c" />
-                <Text style={styles.alertText}>
-                  {alert.type.toUpperCase()} - {alert.status}
-                  {alert.assignedUnit && ` (${alert.assignedUnit.badge})`}
+              {/* Primary button background */}
+              <View style={[StyleSheet.absoluteFillObject, { 
+                borderRadius: windowWidth * 0.35,
+                backgroundColor: isEmergencyActive ? theme.contact : theme.primary
+              }]} />
+              
+              {/* Vibrant glass overlay effect for button pop */}
+              <View style={[StyleSheet.absoluteFillObject, { 
+                borderRadius: windowWidth * 0.35,
+                backgroundColor: 'rgba(255, 255, 255, 0.15)',
+              }]} />
+              
+              {/* Inner highlight for depth */}
+              <View style={[StyleSheet.absoluteFillObject, { 
+                borderRadius: windowWidth * 0.35,
+                backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                transform: [{ translateY: -2 }],
+              }]} />
+              
+              <View style={styles.sosButtonContent}>
+                {isEmergencyActive ? (
+                  <ActivityIndicator size="large" color="#fff" />
+                ) : (
+                  <Ionicons name="warning" size={80} color="#fff" />
+                )}
+                <Text style={styles.sosButtonText}>
+                  {isEmergencyActive ? 'ALERT SENT' : 'SOS'}
+                </Text>
+                <Text style={styles.sosButtonSubtext}>
+                  {isEmergencyActive ? 'Emergency services contacted' : 'Hold for 3 seconds'}
                 </Text>
               </View>
-            ))
-          ) : (
-            <Text style={styles.noAlertsText}>No active alerts</Text>
-          )}
-        </View>
-
-        {/* Emergency Contacts Status */}
-        <View style={styles.contactsStatus}>
-          <Text style={styles.contactsStatusTitle}>🔔 Emergency Notifications</Text>
-          <Text style={styles.contactsStatusText}>
-            {contacts.length > 0 && notificationPermission
-              ? `${contacts.length} contact(s) configured - Critical push notifications enabled`
-              : contacts.length > 0 && !notificationPermission
-              ? `${contacts.length} contact(s) configured - Enable notifications for alerts`
-              : 'No emergency contacts configured - Add contacts in My Community tab'
-            }
-          </Text>
-          {contacts.length > 0 && !notificationPermission && (
-            <TouchableOpacity 
-              style={styles.enableNotificationsButton}
-              onPress={checkNotificationPermission}
-            >
-              <Ionicons name="notifications" size={16} color="#fff" />
-              <Text style={styles.enableNotificationsText}>Enable Notifications</Text>
             </TouchableOpacity>
-          )}
+          </GlassCard>
         </View>
 
-        {/* Emergency Information */}
-        <View style={styles.emergencyInfo}>
-          <Text style={styles.emergencyInfoTitle}>⚠️ Emergency Information</Text>
-          <Text style={styles.emergencyInfoText}>
-            • SOS button dispatches nearest police unit with GPS tracking{'\n'}
-            • Critical push notifications sent instantly to all emergency contacts{'\n'}
-            • Notifications bypass Do Not Disturb and silent mode{'\n'}
-            • Power + Volume Down buttons trigger direct emergency SOS{'\n'}
-            • Audio recording starts automatically for SOS and Security alerts{'\n'}
-            • Response times are tracked for police monitoring{'\n'}
-            • Your medical information and location shared with first responders
+        {/* Emergency Types */}
+        <View style={styles.emergencyTypes}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>
+            Emergency Types
           </Text>
+          
+          <View style={styles.typeGrid}>
+            <TouchableOpacity
+              style={styles.typeButton}
+              onPress={() => handleEmergencyType('hospital')}
+              disabled={isEmergencyActive}
+            >
+              <GlassCard style={styles.typeCard}>
+                {/* Vibrant icon background to make buttons pop */}
+                <View style={[styles.typeIcon, { 
+                  backgroundColor: theme.hospital,
+                  opacity: 0.9,
+                }]}>
+                  <Ionicons name="medical" size={32} color="#ffffff" />
+                </View>
+                <Text style={[styles.typeTitle, { color: theme.text }]}>Medical</Text>
+                <Text style={[styles.typeSubtitle, { color: theme.textSecondary }]}>
+                  Hospital & Ambulance
+                </Text>
+              </GlassCard>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.typeButton}
+              onPress={() => handleEmergencyType('security')}
+              disabled={isEmergencyActive}
+            >
+              <GlassCard style={styles.typeCard}>
+                {/* Vibrant icon background to make buttons pop */}
+                <View style={[styles.typeIcon, { 
+                  backgroundColor: theme.security,
+                  opacity: 0.9,
+                }]}>
+                  <Ionicons name="shield" size={32} color="#ffffff" />
+                </View>
+                <Text style={[styles.typeTitle, { color: theme.text }]}>Security</Text>
+                <Text style={[styles.typeSubtitle, { color: theme.textSecondary }]}>
+                  Police & Safety
+                </Text>
+              </GlassCard>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.typeButton}
+              onPress={() => handleEmergencyType('fire')}
+              disabled={isEmergencyActive}
+            >
+              <GlassCard style={styles.typeCard}>
+                {/* Vibrant icon background to make buttons pop */}
+                <View style={[styles.typeIcon, { 
+                  backgroundColor: theme.monitor,
+                  opacity: 0.9,
+                }]}>
+                  <Ionicons name="flame" size={32} color="#ffffff" />
+                </View>
+                <Text style={[styles.typeTitle, { color: theme.text }]}>Fire</Text>
+                <Text style={[styles.typeSubtitle, { color: theme.textSecondary }]}>
+                  Fire Department
+                </Text>
+              </GlassCard>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* Enhanced Status Info */}
+        <GlassCard style={styles.statusInfo}>
+          <View style={styles.statusRow}>
+            <View style={[styles.statusIcon, { backgroundColor: theme.locationGlass }]}>
+              <Ionicons 
+                name={location ? "checkmark-circle" : "time"} 
+                size={20} 
+                color={location ? theme.location : theme.monitor} 
+              />
+            </View>
+            <View style={styles.statusContent}>
+              <Text style={[styles.statusTitle, { color: theme.text }]}>
+                Location Services
+              </Text>
+              <Text style={[styles.statusSubtitle, { color: theme.textSecondary }]}>
+                {location ? 'Location ready' : 'Getting location...'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.statusSeparator, { backgroundColor: theme.liquidBorder }]} />
+
+          <View style={styles.statusRow}>
+            <View style={[styles.statusIcon, { backgroundColor: theme.contactGlass }]}>
+              <Ionicons 
+                name={contacts.length > 0 ? "people" : "person-add"} 
+                size={20} 
+                color={contacts.length > 0 ? theme.contact : theme.monitor} 
+              />
+            </View>
+            <View style={styles.statusContent}>
+              <Text style={[styles.statusTitle, { color: theme.text }]}>
+                Emergency Contacts
+              </Text>
+              <Text style={[styles.statusSubtitle, { color: theme.textSecondary }]}>
+                {contacts.length > 0 ? `${contacts.length} contacts ready` : 'No contacts added'}
+              </Text>
+            </View>
+          </View>
+
+          {isRecording && (
+            <>
+              <View style={[styles.statusSeparator, { backgroundColor: theme.liquidBorder }]} />
+              <View style={styles.statusRow}>
+                <View style={[styles.statusIcon, { backgroundColor: theme.contactGlass }]}>
+                  <Ionicons name="mic" size={20} color={theme.contact} />
+                </View>
+                <View style={styles.statusContent}>
+                  <Text style={[styles.statusTitle, { color: theme.text }]}>
+                    Audio Recording
+                  </Text>
+                  <Text style={[styles.statusSubtitle, { color: theme.textSecondary }]}>
+                    Recording emergency audio
+                  </Text>
+                </View>
+              </View>
+            </>
+          )}
+        </GlassCard>
       </View>
-    </Screen>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+  },
+  content: {
+    flex: 1,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingHorizontal: 20,
-    paddingTop: 5,
+    paddingBottom: 40,
   },
   header: {
+    marginBottom: 32,
+  },
+  headerCard: {
     alignItems: 'center',
-    marginTop: -5,
-    marginBottom: 12,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#e74c3c',
-    marginTop: 10,
+  headerTitle: {
+    fontSize: 32,
+    fontWeight: '700',
+    letterSpacing: -1,
   },
-  subtitle: {
+  headerSubtitle: {
     fontSize: 16,
-    color: '#7f8c8d',
-    marginTop: 5,
-  },
-  hardwareButtonInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-  },
-  hardwareButtonTextContainer: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  hardwareButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2c3e50',
-  },
-  hardwareButtonSubtext: {
-    fontSize: 12,
-    color: '#7f8c8d',
-    marginTop: 2,
-  },
-  emergencyButtonContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  emergencyButton: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: '#e74c3c',
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#e74c3c',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 8,
-      },
-    }),
-  },
-  emergencyButtonActive: {
-    backgroundColor: '#c0392b',
-  },
-  emergencyButtonText: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginTop: 8,
-  },
-  emergencyButtonSubtext: {
-    color: '#fff',
-    fontSize: 12,
+    fontWeight: '500',
     marginTop: 4,
   },
-  locationStatus: {
-    flexDirection: 'row',
+  mainButtonContainer: {
     alignItems: 'center',
+    marginBottom: 40,
+  },
+  sosCard: {
+    alignItems: 'center',
+  },
+  sosButton: {
+    width: windowWidth * 0.7,
+    height: windowWidth * 0.7,
+    borderRadius: windowWidth * 0.35,
     justifyContent: 'center',
-    marginBottom: 24,
-  },
-  locationText: {
-    fontSize: 14,
-    color: '#7f8c8d',
-    marginLeft: 8,
-  },
-  recordingStatus: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  recordingText: {
-    fontSize: 14,
-    color: '#7f8c8d',
-    marginLeft: 8,
-  },
-  recordingIndicator: {
-    width: 100,
-    height: 4,
-    backgroundColor: '#e74c3c',
-    borderRadius: 2,
-    marginLeft: 8,
-  },
-  emergencyTypesContainer: {
-    marginBottom: 24,
-  },
-  emergencyTypesTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2c3e50',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  emergencyTypes: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  emergencyTypeButton: {
-    flex: 1,
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-    minHeight: 100,
+    overflow: 'hidden',
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
+        shadowColor: '#E67E62',
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.4,
+        shadowRadius: 24,
       },
       android: {
-        elevation: 1,
+        elevation: 16,
       },
     }),
   },
-  emergencyTypeText: {
-    color: '#2c3e50',
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 8,
-    textAlign: 'center',
+  sosButtonContent: {
+    alignItems: 'center',
+    zIndex: 1,
   },
-  testButtonsContainer: {
+  sosButtonText: {
+    color: '#fff',
+    fontSize: 36,
+    fontWeight: '800',
+    marginTop: 16,
+    letterSpacing: 2,
+  },
+  sosButtonSubtext: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 8,
+  },
+  emergencyTypes: {
+    marginBottom: 32,
+  },
+  sectionTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 20,
+    letterSpacing: -0.5,
+  },
+  typeGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginBottom: 16,
-    gap: 12,
   },
-  testButton: {
-    backgroundColor: '#3498db',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+  typeButton: {
     flex: 1,
+    marginHorizontal: 4,
   },
-  testNotificationButton: {
-    backgroundColor: '#9b59b6',
-  },
-  testButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  enableNotificationsButton: {
-    backgroundColor: '#e74c3c',
-    flexDirection: 'row',
+  typeCard: {
     alignItems: 'center',
+    minHeight: 140,
+  },
+  typeIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 18,
     justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    marginTop: 8,
-    alignSelf: 'flex-start',
+    alignItems: 'center',
+    marginBottom: 12,
   },
-  enableNotificationsText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 6,
-  },
-  activeAlerts: {
-    backgroundColor: '#fff3e0',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#f39c12',
-  },
-  activeAlertsTitle: {
+  typeTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#f39c12',
-    marginBottom: 8,
-  },
-  alertItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
     marginBottom: 4,
   },
-  alertText: {
-    fontSize: 14,
-    color: '#7f8c8d',
-    marginLeft: 8,
+  typeSubtitle: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 16,
   },
-  noAlertsText: {
-    fontSize: 14,
-    color: '#7f8c8d',
-    fontStyle: 'italic',
+  statusInfo: {},
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
   },
-  contactsStatus: {
-    backgroundColor: '#f8f9fa',
-    padding: 16,
+  statusIcon: {
+    width: 40,
+    height: 40,
     borderRadius: 12,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#3498db',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
   },
-  contactsStatusTitle: {
+  statusContent: {
+    flex: 1,
+  },
+  statusTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#2c3e50',
-    marginBottom: 8,
+    marginBottom: 2,
   },
-  contactsStatusText: {
+  statusSubtitle: {
     fontSize: 14,
-    color: '#7f8c8d',
-    lineHeight: 20,
   },
-  emergencyInfo: {
-    backgroundColor: '#f8f9fa',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  emergencyInfoTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2c3e50',
-    marginBottom: 8,
-  },
-  emergencyInfoText: {
-    fontSize: 14,
-    color: '#7f8c8d',
-    lineHeight: 20,
+  statusSeparator: {
+    height: 1,
+    marginVertical: 16,
+    marginLeft: 56,
   },
 }); 

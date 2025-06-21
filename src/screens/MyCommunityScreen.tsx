@@ -18,7 +18,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
-import * as Contacts from 'expo-contacts';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 interface EmergencyContact {
@@ -41,6 +40,12 @@ interface ContactLocation {
   accuracy?: number;
 }
 
+interface PhoneContact {
+  id: string;
+  name: string;
+  phoneNumbers: { number: string }[];
+}
+
 const MyCommunityScreen = () => {
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
   const [contactLocations, setContactLocations] = useState<ContactLocation[]>([]);
@@ -53,8 +58,8 @@ const MyCommunityScreen = () => {
   
   // Contact management states
   const [isContactModalVisible, setIsContactModalVisible] = useState(false);
-  const [phoneContacts, setPhoneContacts] = useState<Contacts.Contact[]>([]);
-  const [filteredPhoneContacts, setFilteredPhoneContacts] = useState<Contacts.Contact[]>([]);
+  const [phoneContacts, setPhoneContacts] = useState<PhoneContact[]>([]);
+  const [filteredPhoneContacts, setFilteredPhoneContacts] = useState<PhoneContact[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
   const [contactsPermission, setContactsPermission] = useState<boolean>(false);
@@ -301,84 +306,28 @@ const MyCommunityScreen = () => {
   };
 
   // Contact Management Functions
-  const requestContactsPermission = async () => {
-    try {
-      const { status } = await Contacts.requestPermissionsAsync();
-      setContactsPermission(status === 'granted');
-      return status === 'granted';
-    } catch (error) {
-      console.error('Error requesting contacts permission:', error);
-      return false;
-    }
-  };
-
-  const loadPhoneContacts = async () => {
-    try {
-      setIsLoadingContacts(true);
-      
-      const hasPermission = contactsPermission || await requestContactsPermission();
-      
-      if (!hasPermission) {
+  const showAddContactManually = () => {
         Alert.alert(
-          'Contacts Permission Required',
-          'Please enable contacts access to import your phone contacts.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Settings', onPress: () => Linking.openSettings() },
+      'Add Emergency Contact',
+      'Go to the Contacts screen to add emergency contacts manually.',
+      [
+        { text: 'OK' }
           ]
         );
-        return;
-      }
-
-      const { data } = await Contacts.getContactsAsync({
-        fields: [Contacts.Fields.Name, Contacts.Fields.PhoneNumbers],
-        sort: Contacts.SortTypes.FirstName,
-      });
-
-      // Filter contacts that have phone numbers
-      const contactsWithPhones = data.filter(contact => 
-        contact.phoneNumbers && contact.phoneNumbers.length > 0
-      );
-
-      setPhoneContacts(contactsWithPhones);
-      setFilteredPhoneContacts(contactsWithPhones);
-    } catch (error) {
-      console.error('Error loading phone contacts:', error);
-      Alert.alert('Error', 'Failed to load phone contacts');
-    } finally {
-      setIsLoadingContacts(false);
-    }
   };
 
-  const searchContacts = (query: string) => {
-    setSearchQuery(query);
-    if (!query.trim()) {
-      setFilteredPhoneContacts(phoneContacts);
-      return;
-    }
+  // Simplified without expo-contacts - users can add contacts manually via the Contacts screen
 
-    const filtered = phoneContacts.filter(contact =>
-      contact.name?.toLowerCase().includes(query.toLowerCase()) ||
-      contact.phoneNumbers?.some(phone => 
-        phone.number?.includes(query)
-      )
-    );
-    setFilteredPhoneContacts(filtered);
-  };
-
-  const addEmergencyContact = async (contact: Contacts.Contact, relationship: string) => {
+  const addEmergencyContact = async (contactName: string, phoneNumber: string, relationship: string) => {
     try {
-      if (!contact.phoneNumbers || contact.phoneNumbers.length === 0) {
-        Alert.alert('Error', 'This contact has no phone number');
+      if (!phoneNumber || !contactName) {
+        Alert.alert('Error', 'Please provide contact name and phone number');
         return;
       }
-
-      const primaryPhone = contact.phoneNumbers[0].number || '';
-      const contactName = contact.name || 'Unknown Contact';
 
       // Check if contact already exists
       const existingContact = contacts.find(c => 
-        c.phone === primaryPhone || c.name === contactName
+        c.phone === phoneNumber || c.name === contactName
       );
 
       if (existingContact) {
@@ -389,7 +338,7 @@ const MyCommunityScreen = () => {
       const newEmergencyContact: EmergencyContact = {
         id: Date.now().toString(),
         name: contactName,
-        phone: primaryPhone,
+        phone: phoneNumber,
         relationship: relationship,
       };
 
@@ -446,25 +395,34 @@ const MyCommunityScreen = () => {
   };
 
   const openContactImportModal = async () => {
-    setIsContactModalVisible(true);
-    if (phoneContacts.length === 0) {
-      await loadPhoneContacts();
-    }
+    showAddContactManually();
   };
 
-  const selectRelationshipAndAdd = (contact: Contacts.Contact) => {
+  const addManualContact = () => {
+    Alert.prompt(
+      'Add Emergency Contact',
+      'Enter contact name:',
+      (name) => {
+        if (name) {
+          Alert.prompt(
+            'Add Emergency Contact',
+            'Enter phone number:',
+            (phone) => {
+              if (phone) {
     const relationships = ['Family', 'Friend', 'Doctor', 'Neighbor', 'Emergency Contact'];
-    
     Alert.alert(
       'Select Relationship',
-      `Choose relationship for ${contact.name}:`,
-      [
-        ...relationships.map(rel => ({
+                  'Choose relationship:',
+                  relationships.map(rel => ({
           text: rel,
-          onPress: () => addEmergencyContact(contact, rel)
-        })),
-        { text: 'Cancel', style: 'cancel' }
-      ]
+                    onPress: () => addEmergencyContact(name, phone, rel)
+                  }))
+                );
+              }
+            }
+          );
+        }
+      }
     );
   };
 
@@ -710,98 +668,7 @@ const MyCommunityScreen = () => {
         </View>
       </Modal>
 
-      {/* Contact Import Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={isContactModalVisible}
-        onRequestClose={() => setIsContactModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.contactModalContent}>
-            <View style={styles.contactModalHeader}>
-              <Text style={styles.contactModalTitle}>Import Emergency Contacts</Text>
-              <TouchableOpacity
-                style={styles.contactModalCloseButton}
-                onPress={() => setIsContactModalVisible(false)}
-              >
-                <Ionicons name="close" size={24} color="#7f8c8d" />
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={20} color="#7f8c8d" style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={searchContacts}
-                placeholder="Search contacts..."
-                placeholderTextColor="#bdc3c7"
-              />
-            </View>
-
-            {isLoadingContacts ? (
-              <View style={styles.contactsLoadingContainer}>
-                <ActivityIndicator size="large" color="#3498db" />
-                <Text style={styles.contactsLoadingText}>Loading your contacts...</Text>
-              </View>
-            ) : (
-              <FlatList
-                data={filteredPhoneContacts}
-                keyExtractor={(item) => item.id || item.name || Math.random().toString()}
-                renderItem={({ item }) => (
-                  <TouchableOpacity 
-                    style={styles.phoneContactItem}
-                    onPress={() => selectRelationshipAndAdd(item)}
-                  >
-                    <View style={styles.phoneContactInfo}>
-                      <View style={styles.phoneContactAvatar}>
-                        <Text style={styles.phoneContactAvatarText}>
-                          {getContactInitials(item.name || 'N/A')}
-                        </Text>
-                      </View>
-                      <View style={styles.phoneContactDetails}>
-                        <Text style={styles.phoneContactName}>
-                          {item.name || 'Unknown Contact'}
-                        </Text>
-                        <Text style={styles.phoneContactNumber}>
-                          {item.phoneNumbers?.[0]?.number || 'No phone number'}
-                        </Text>
-                      </View>
-                    </View>
-                    <Ionicons name="add-circle" size={24} color="#3498db" />
-                  </TouchableOpacity>
-                )}
-                ListEmptyComponent={() => (
-                  <View style={styles.emptyContactsContainer}>
-                    <Ionicons name="people-outline" size={48} color="#bdc3c7" />
-                    <Text style={styles.emptyContactsText}>
-                      {searchQuery ? 'No contacts found' : 'No contacts available'}
-                    </Text>
-                    {!contactsPermission && (
-                      <TouchableOpacity
-                        style={styles.permissionButton}
-                        onPress={loadPhoneContacts}
-                      >
-                        <Ionicons name="settings" size={16} color="#fff" />
-                        <Text style={styles.permissionButtonText}>Grant Permission</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                )}
-                showsVerticalScrollIndicator={false}
-                style={styles.contactsList}
-              />
-            )}
-
-            <View style={styles.contactModalFooter}>
-              <Text style={styles.contactModalFooterText}>
-                Tap any contact to add them as an emergency contact
-              </Text>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Simplified - No contact import modal needed */}
     </View>
   );
 };

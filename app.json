@@ -19,10 +19,17 @@
       "bundleIdentifier": "com.lwandonova.safetyalertapp",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSLocationWhenInUseUsageDescription": "This app uses location services to provide emergency alerts and share your location with emergency contacts.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses location services to provide emergency alerts and share your location with emergency contacts even when the app is in the background.",
-        "NSLocationAlwaysUsageDescription": "This app uses location services to provide emergency alerts and share your location with emergency contacts even when the app is in the background.",
-        "NSUserNotificationsUsageDescription": "This app sends critical emergency notifications to alert your emergency contacts when you need help."
+        "NSLocationWhenInUseUsageDescription": "Safe Alert needs location access to provide emergency services with your exact location during critical situations and to share your location with emergency contacts.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Safe Alert uses location services to provide emergency alerts and share your location with emergency contacts even when the app is in the background for continuous safety monitoring.",
+        "NSLocationAlwaysUsageDescription": "Safe Alert needs background location access to provide continuous safety monitoring and emergency location sharing with your emergency contacts.",
+        "NSLocationTemporaryUsageDescriptionDictionary": {
+          "EmergencyLocation": "Safe Alert needs temporary access to your location to send emergency alerts with your current position to first responders and emergency contacts."
+        },
+        "NSUserNotificationsUsageDescription": "Safe Alert sends critical emergency notifications to alert your emergency contacts when you need help. These notifications bypass Do Not Disturb for emergency situations.",
+        "NSMicrophoneUsageDescription": "Safe Alert may record audio during emergency situations for evidence and to help emergency responders understand the situation.",
+        "NSContactsUsageDescription": "Safe Alert needs access to your contacts to help you quickly add emergency contacts for critical safety notifications.",
+        "NSCameraUsageDescription": "Safe Alert may use the camera to capture evidence during emergency situations.",
+        "NSPhotoLibraryUsageDescription": "Safe Alert may save emergency evidence to your photo library for documentation purposes."
       }
     },
     "android": {
@@ -36,7 +43,11 @@
         "ACCESS_BACKGROUND_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
-        "WAKE_LOCK"
+        "WAKE_LOCK",
+        "RECORD_AUDIO",
+        "READ_CONTACTS",
+        "CAMERA",
+        "WRITE_EXTERNAL_STORAGE"
       ],
       "package": "com.lwandonova.safetyalertapp"
     },
@@ -53,7 +64,11 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location."
+          "locationAlwaysAndWhenInUsePermission": "Safe Alert needs location access to provide emergency services with your exact location during critical situations.",
+          "locationAlwaysPermission": "Safe Alert needs background location access for continuous safety monitoring and emergency location sharing.",
+          "locationWhenInUsePermission": "Safe Alert needs location access to provide emergency services with your exact location during critical situations.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true
         }
       ],
       [
@@ -63,7 +78,7 @@
           "color": "#e74c3c",
           "sounds": ["./assets/emergency-alert.wav"],
           "mode": "production"
-        }
+                }
       ]
     ],
     "notification": {

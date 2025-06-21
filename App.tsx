@@ -1,4 +1,5 @@
 import React from 'react';
+import { View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ThemeProvider } from './src/context/ThemeContext';
@@ -40,12 +41,35 @@ const TabNavigator = () => {
         tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.textSecondary,
         tabBarStyle: {
-          backgroundColor: theme.card,
+          backgroundColor: 'transparent',
+          borderTopWidth: 0,
+          elevation: 0,
+          shadowOpacity: 0,
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 88,
+          paddingBottom: 34,
+          paddingTop: 8,
         },
+        tabBarBackground: () => (
+          <View style={{
+            flex: 1,
+            backgroundColor: theme.card,
+            borderTopLeftRadius: 0,
+            borderTopRightRadius: 0,
+          }} />
+        ),
         headerStyle: {
           backgroundColor: theme.card,
+          borderBottomWidth: 0,
+          elevation: 0,
+          shadowOpacity: 0,
         },
         headerTintColor: theme.text,
+        headerTransparent: true,
+        headerBlurEffect: 'systemMaterial',
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
