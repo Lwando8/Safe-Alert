@@ -76,10 +76,14 @@
         {
           "icon": "./assets/icon.png",
           "color": "#e74c3c",
-          "sounds": ["./assets/emergency-alert.wav"],
+          "sounds": [
+            "./assets/emergency-alert.wav"
+          ],
           "mode": "production"
-                }
-      ]
+        }
+      ],
+      "expo-font",
+      "expo-asset"
     ],
     "notification": {
       "icon": "./assets/icon.png",
