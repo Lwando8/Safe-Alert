@@ -1,34 +1,47 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { AuthStackParamList } from '../types/navigation';
-
-// Import screens (placeholder components for now)
-import LoginScreen from '../screens/auth/LoginScreen';
-import RegisterScreen from '../screens/auth/RegisterScreen';
-import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
+import { AuthStackParamList } from '../types';
+import { UserRole } from '../types/auth';
+import AuthEntryScreen from '../screens/AuthEntryScreen';
+import LoginScreen from '../screens/LoginScreen';
+import ResponderLoginScreen from '../screens/ResponderLoginScreen';
+import AdminLoginScreen from '../screens/AdminLoginScreen';
+import RegisterScreen from '../screens/RegisterScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
-export default function AuthNavigator() {
+interface AuthNavigatorProps {
+  onAuthenticate: (role: UserRole) => void;
+}
+
+export default function AuthNavigator({ onAuthenticate }: AuthNavigatorProps) {
   return (
     <Stack.Navigator
+      initialRouteName="AuthEntry"
       screenOptions={{
-        headerStyle: {
-          backgroundColor: '#f5f5f5',
-        },
-        headerTintColor: '#000',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
+        headerShown: false,
+        contentStyle: { backgroundColor: '#ffffff' },
       }}
     >
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Register" component={RegisterScreen} />
+      <Stack.Screen name="AuthEntry" component={AuthEntryScreen} />
+      <Stack.Screen name="Login">
+        {props => <LoginScreen {...props} onAuthenticate={onAuthenticate} />}
+      </Stack.Screen>
+      <Stack.Screen name="ResponderLogin">
+        {props => <ResponderLoginScreen {...props} onAuthenticate={onAuthenticate} />}
+      </Stack.Screen>
+      <Stack.Screen name="AdminLogin">
+        {props => <AdminLoginScreen {...props} onAuthenticate={onAuthenticate} />}
+      </Stack.Screen>
+      <Stack.Screen name="Register">
+        {props => <RegisterScreen {...props} />}
+      </Stack.Screen>
       <Stack.Screen
         name="ForgotPassword"
         component={ForgotPasswordScreen}
-        options={{ title: 'Forgot Password' }}
+        options={{ headerShown: true, title: 'Forgot Password' }}
       />
     </Stack.Navigator>
   );
-} 
+}

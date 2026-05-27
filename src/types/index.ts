@@ -65,4 +65,66 @@ export interface IncidentTypeConfig {
   icon: string;
   color: string;
   description: string;
-} 
+}
+
+export type { UserRole, LoginMode, AuthUser, AuthSession } from './auth';
+export type {
+  ResponderRole,
+  ResponderProfile,
+  Assignment,
+  DispatchAlert,
+} from './dispatch';
+
+// Navigation types
+export type RootStackParamList = {
+  Auth: undefined;
+  Main: undefined;
+  Responder: undefined;
+  Admin: undefined;
+};
+
+export type ResponderStackParamList = {
+  ResponderShiftStart: undefined;
+  ResponderMap: undefined;
+  ResponderAssignments: undefined;
+  ResponderAlertDetail: { alertId: string };
+};
+
+export type AdminStackParamList = {
+  AdminDashboard: undefined;
+  AdminOperationalDevices: undefined;
+  AdminUnits: undefined;
+  AdminShifts: undefined;
+  AdminAnalytics: undefined;
+  AdminIncidents: undefined;
+  AdminIncidentDetail: { incidentId: string };
+  AdminIncidentTimeline: { incidentId: string };
+};
+
+export type MainTabParamList = {
+  Home: undefined;
+  Community: undefined;
+  Alert: undefined;
+  Contacts: undefined;
+  Profile: undefined;
+};
+
+export type AuthStackParamList = {
+  AuthEntry: undefined;
+  Login: undefined;
+  ResponderLogin: undefined;
+  AdminLogin: undefined;
+  Register: undefined;
+  ForgotPassword: undefined;
+};
+
+export type ProfileStackParamList = {
+  ProfileMain: undefined;
+  EditProfile: undefined;
+  MedicalInfo: undefined;
+  EmergencyContacts: undefined;
+  EmergencyMonitoring: undefined;
+  Settings: undefined;
+  PrivacyPolicy: undefined;
+  Terms: undefined;
+}; 

@@ -1,74 +1,88 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { MainTabParamList } from '../types/navigation';
 import { Ionicons } from '@expo/vector-icons';
-
-// Import screens (we'll create these next)
-import HomeScreen from '../screens/main/HomeScreen';
-import SafeZonesScreen from '../screens/main/SafeZonesScreen';
-import AlertScreen from '../screens/main/AlertScreen';
-import ContactsScreen from '../screens/main/ContactsScreen';
+import { MainTabParamList } from '../types';
+import { useTheme } from '../context/ThemeContext';
+import HomeScreen from '../screens/HomeScreen';
+import MyCommunityScreen from '../screens/MyCommunityScreen';
+import EmergencyMonitoringScreen from '../screens/EmergencyMonitoringScreen';
+import ContactsScreen from '../screens/ContactsScreen';
 import ProfileNavigator from './ProfileNavigator';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 export default function MainNavigator() {
+  const { theme } = useTheme();
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap;
 
-          switch (route.name) {
-            case 'Home':
-              iconName = focused ? 'home' : 'home-outline';
-              break;
-            case 'Community':
-              iconName = focused ? 'people-circle' : 'people-circle-outline';
-              break;
-            case 'Alert':
-              iconName = focused ? 'warning' : 'warning-outline';
-              break;
-            case 'Contacts':
-              iconName = focused ? 'people' : 'people-outline';
-              break;
-            case 'Profile':
-              iconName = focused ? 'person' : 'person-outline';
-              break;
-            default:
-              iconName = 'help-outline';
+          if (route.name === 'Home') {
+            iconName = focused ? 'home' : 'home-outline';
+          } else if (route.name === 'Community') {
+            iconName = focused ? 'people' : 'people-outline';
+          } else if (route.name === 'Alert') {
+            iconName = focused ? 'warning' : 'warning-outline';
+          } else if (route.name === 'Contacts') {
+            iconName = focused ? 'call' : 'call-outline';
+          } else if (route.name === 'Profile') {
+            iconName = focused ? 'person' : 'person-outline';
+          } else {
+            iconName = 'home-outline';
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#e74c3c',
-        tabBarInactiveTintColor: 'gray',
+        tabBarActiveTintColor: theme.primary,
+        tabBarInactiveTintColor: theme.textSecondary,
+        tabBarStyle: {
+          backgroundColor: theme.card,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: theme.border,
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 88,
+          paddingBottom: 34,
+          paddingTop: 8,
+        },
         headerStyle: {
-          backgroundColor: '#f5f5f5',
+          backgroundColor: theme.card,
+          borderBottomWidth: 0,
+          elevation: 0,
+          shadowOpacity: 0,
         },
-        headerTintColor: '#000',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
+        headerTintColor: theme.text,
+        headerTransparent: true,
       })}
     >
-      <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Community" component={SafeZonesScreen} options={{ title: 'My Community' }} />
+      <Tab.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+      <Tab.Screen
+        name="Community"
+        component={MyCommunityScreen}
+        options={{ headerShown: false }}
+      />
       <Tab.Screen
         name="Alert"
-        component={AlertScreen}
-        options={{
-          tabBarIcon: ({ focused, color, size }) => (
-            <Ionicons
-              name={focused ? 'alert-circle' : 'alert-circle-outline'}
-              size={32}
-              color="#e74c3c"
-            />
-          ),
-        }}
+        component={EmergencyMonitoringScreen}
+        options={{ title: 'Alert' }}
       />
       <Tab.Screen name="Contacts" component={ContactsScreen} />
-      <Tab.Screen name="Profile" component={ProfileNavigator} />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileNavigator}
+        options={{ headerShown: false }}
+      />
     </Tab.Navigator>
   );
-} 
+}

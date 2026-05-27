@@ -33,6 +33,7 @@
       }
     },
     "android": {
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
@@ -54,7 +55,7 @@
     "web": {
       "favicon": "./assets/icon.png"
     },
-    "entryPoint": "./App.tsx",
+    "entryPoint": "./index.js",
     "extra": {
       "eas": {
         "projectId": "f9205a74-28bb-4abb-b289-13699fe0b32d"

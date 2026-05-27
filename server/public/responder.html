@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Safe Alert - Responder Dashboard</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-m0QbQY0Jf0v6HuZ17hIuP89xDSHLheXRIty0p0ujjLk="
+    crossorigin=""
+  />
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #0f172a; color: #e2e8f0; }
+    header { padding: 16px; background: #111827; border-bottom: 1px solid #1f2937; }
+    h1 { margin: 0; font-size: 20px; }
+    .container { padding: 16px; display: grid; grid-template-columns: 320px 1fr; gap: 16px; }
+    .card { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
+    .row { margin-bottom: 10px; }
+    label { display: block; margin-bottom: 6px; font-size: 13px; color: #93c5fd; text-transform: uppercase; letter-spacing: 0.04em; }
+    select, button { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #1f2937; background: #0b1220; color: #e2e8f0; }
+    #map { height: 480px; width: 100%; border-radius: 12px; overflow: hidden; }
+    ul { padding-left: 18px; margin: 6px 0; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 8px; font-size: 12px; background: #1f2937; color: #93c5fd; margin-right: 6px; }
+    .log { font-size: 12px; max-height: 160px; overflow-y: auto; background: #0b1220; padding: 8px; border-radius: 8px; border: 1px solid #1f2937; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Responder Dashboard</h1>
+    <div style="color:#9ca3af;font-size:13px;">Live assignments and location streaming</div>
+  </header>
+  <div class="container">
+    <div class="card">
+      <div class="row">
+        <label for="alertSelect">Select Alert</label>
+        <select id="alertSelect"></select>
+      </div>
+      <div class="row">
+        <label>Assignments</label>
+        <div id="assignmentList">No assignments yet.</div>
+      </div>
+      <div class="row">
+        <label>Recent Locations</label>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div id="map"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-o9N1j7kGStbZ78n3AJ1Ux3rHdyAzMEt2O2U6pSieXbE=" crossorigin=""></script>
+  <script>
+    const alertSelect = document.getElementById('alertSelect');
+    const logEl = document.getElementById('log');
+    const assignmentEl = document.getElementById('assignmentList');
+    let currentAlertId = null;
+    let map, marker;
+
+    const ws = new WebSocket((location.origin.replace(/^http/, 'ws')));
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'subscribe_all' }));
+      console.log('WS connected');
+    };
+
+    ws.onmessage = (msg) => {
+      const data = JSON.parse(msg.data);
+      if (data.event === 'welcome' && Array.isArray(data.alerts)) {
+        populateAlerts(data.alerts);
+      }
+      if (data.event === 'alert_created') {
+        addAlertOption(data.alert);
+      }
+      if (data.event === 'alert_snapshot' && data.alert && data.alert.id === currentAlertId) {
+        renderAssignments(data.alert.assignments || []);
+        renderLocations(data.alert.locations || []);
+      }
+      if (data.event === 'location_update' && data.alertId === currentAlertId) {
+        addLocation(data.location);
+      }
+    };
+
+    ws.onclose = () => log('WebSocket disconnected');
+
+    function populateAlerts(alerts) {
+      alertSelect.innerHTML = '';
+      alerts.forEach(addAlertOption);
+      if (alerts.length > 0) {
+        selectAlert(alerts[0].id);
+      }
+    }
+
+    function addAlertOption(alert) {
+      if (!alert?.id) return;
+      const exists = Array.from(alertSelect.options).some(opt => opt.value === alert.id);
+      if (exists) return;
+      const opt = document.createElement('option');
+      opt.value = alert.id;
+      opt.textContent = `${alert.type.toUpperCase()} • ${new Date(alert.createdAt).toLocaleTimeString()}`;
+      alertSelect.appendChild(opt);
+      if (!currentAlertId) {
+        selectAlert(alert.id);
+      }
+    }
+
+    alertSelect.addEventListener('change', (e) => selectAlert(e.target.value));
+
+    function selectAlert(alertId) {
+      currentAlertId = alertId;
+      ws.send(JSON.stringify({ type: 'subscribe', alertId }));
+      fetch(`/alerts/${alertId}`)
+        .then(r => r.json())
+        .then(alert => {
+          renderAssignments(alert.assignments || []);
+          renderLocations(alert.locations || []);
+        })
+        .catch(() => log('Failed to load alert'));
+    }
+
+    function renderAssignments(assignments) {
+      if (!assignments.length) {
+        assignmentEl.textContent = 'No active assignments';
+        return;
+      }
+      assignmentEl.innerHTML = '';
+      const list = document.createElement('ul');
+      assignments.forEach(a => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+          <span class="badge">${a.role}</span>
+          ${a.name || a.responderId} • ${a.distanceKm} km • ETA ${a.etaMinutes}m
+        `;
+        list.appendChild(li);
+      });
+      assignmentEl.appendChild(list);
+    }
+
+    function renderLocations(locations) {
+      logEl.innerHTML = '';
+      locations.slice(-5).forEach(addLocation);
+      const latest = locations[locations.length - 1];
+      if (latest) updateMap(latest);
+    }
+
+    function addLocation(loc) {
+      if (!loc) return;
+      const item = document.createElement('div');
+      item.textContent = `${new Date(loc.timestamp || Date.now()).toLocaleTimeString()} • ${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}`;
+      logEl.prepend(item);
+      updateMap(loc);
+    }
+
+    function log(msg) {
+      const item = document.createElement('div');
+      item.textContent = msg;
+      logEl.prepend(item);
+    }
+
+    function updateMap(loc) {
+      if (!map) {
+        map = L.map('map').setView([loc.latitude, loc.longitude], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+      } else {
+        map.setView([loc.latitude, loc.longitude]);
+      }
+      if (marker) {
+        marker.setLatLng([loc.latitude, loc.longitude]);
+      } else {
+        marker = L.marker([loc.latitude, loc.longitude]).addTo(map);
+      }
+    }
+  </script>
+</body>
+</html>

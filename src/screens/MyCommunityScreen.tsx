@@ -12,7 +12,6 @@ import {
   StatusBar,
   ActivityIndicator,
   Modal,
-  TextInput,
   FlatList,
   Dimensions,
 } from 'react-native';
@@ -32,6 +31,7 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import Screen from '../components/Screen';
 import GlassCard from '../components/GlassCard';
 import BlurOverlay from '../components/BlurOverlay';
+import AddEmergencyContactModal from '../components/AddEmergencyContactModal';
 import { useTheme } from '../context/ThemeContext';
 
 const { width: windowWidth } = Dimensions.get('window');
@@ -75,6 +75,12 @@ const MyCommunityScreen = () => {
   
   // Contact management states
   const [isContactModalVisible, setIsContactModalVisible] = useState(false);
+  const [isSavingContact, setIsSavingContact] = useState(false);
+  const [newContact, setNewContact] = useState({
+    name: '',
+    phone: '',
+    relationship: 'Family',
+  });
   const [phoneContacts, setPhoneContacts] = useState<PhoneContact[]>([]);
   const [filteredPhoneContacts, setFilteredPhoneContacts] = useState<PhoneContact[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -312,28 +318,34 @@ const MyCommunityScreen = () => {
   };
 
   const getRelationshipColor = (relationship: string) => {
-    const colors = {
-      'Family': '#e74c3c',
-      'Friend': '#3498db',
-      'Doctor': '#2ecc71',
-      'Neighbor': '#f39c12',
-      'Emergency Contact': '#9b59b6',
+    const colors: Record<string, string> = {
+      Family: theme.emergency,
+      Friend: theme.security,
+      Doctor: theme.hospital,
+      Neighbor: theme.monitor,
+      'Emergency Contact': theme.profile,
     };
-    return colors[relationship as keyof typeof colors] || '#7f8c8d';
+    return colors[relationship] || theme.textSecondary;
   };
 
   // Contact Management Functions
   const showAddContactManually = () => {
-        Alert.alert(
-      'Add Emergency Contact',
-      'Go to the Contacts screen to add emergency contacts manually.',
-      [
-        { text: 'OK' }
-          ]
-        );
+    setNewContact({ name: '', phone: '', relationship: 'Family' });
+    setIsContactModalVisible(true);
   };
 
-  // Simplified without expo-contacts - users can add contacts manually via the Contacts screen
+  const submitNewEmergencyContact = async () => {
+    setIsSavingContact(true);
+    try {
+      await addEmergencyContact(
+        newContact.name.trim(),
+        newContact.phone.trim(),
+        newContact.relationship || 'Emergency Contact'
+      );
+    } finally {
+      setIsSavingContact(false);
+    }
+  };
 
   const addEmergencyContact = async (contactName: string, phoneNumber: string, relationship: string) => {
     try {
@@ -411,36 +423,8 @@ const MyCommunityScreen = () => {
     }
   };
 
-  const openContactImportModal = async () => {
+  const openContactImportModal = () => {
     showAddContactManually();
-  };
-
-  const addManualContact = () => {
-    Alert.prompt(
-      'Add Emergency Contact',
-      'Enter contact name:',
-      (name) => {
-        if (name) {
-          Alert.prompt(
-            'Add Emergency Contact',
-            'Enter phone number:',
-            (phone) => {
-              if (phone) {
-    const relationships = ['Family', 'Friend', 'Doctor', 'Neighbor', 'Emergency Contact'];
-    Alert.alert(
-      'Select Relationship',
-                  'Choose relationship:',
-                  relationships.map(rel => ({
-          text: rel,
-                    onPress: () => addEmergencyContact(name, phone, rel)
-                  }))
-                );
-              }
-            }
-          );
-        }
-      }
-    );
   };
 
   if (isLoading) {
@@ -476,51 +460,45 @@ const MyCommunityScreen = () => {
         }]} />
       </View>
 
-      {/* Blur Overlays for Toolbars */}
-      <BlurOverlay 
-        position="top" 
-        height={Platform.OS === 'ios' ? 130 : 110} 
-        backgroundColor={theme.card} 
-      />
-      <BlurOverlay 
-        position="bottom" 
-        height={88} 
-        backgroundColor={theme.card} 
-      />
+      <BlurOverlay position="bottom" height={88} backgroundColor={theme.card} />
       
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: 'transparent' }]}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={refreshCommunity}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
         <GlassCard intensity={20} style={styles.headerCard}>
           <View style={styles.headerContent}>
             <View style={styles.headerLeft}>
               <Text style={[styles.headerTitle, { color: theme.text }]}>My Community</Text>
               <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-                {contactLocations.filter(c => c.status === 'sharing').length} of {contacts.length} sharing live location
+                {contactLocations.filter(c => c.status === 'sharing').length} of {contacts.length}{' '}
+                sharing live location
               </Text>
             </View>
             <TouchableOpacity
-              style={[styles.shareButton, { backgroundColor: theme.primary }]}
+              style={[
+                styles.shareButton,
+                {
+                  backgroundColor: theme.primaryGlass,
+                  borderColor: theme.border,
+                },
+              ]}
               onPress={shareMyLocation}
             >
-              <Ionicons name="location" size={20} color="#fff" />
-              <Text style={styles.shareButtonText}>Share</Text>
+              <Ionicons name="location" size={18} color={theme.primary} />
+              <Text style={[styles.shareButtonText, { color: theme.text }]}>Share</Text>
             </TouchableOpacity>
           </View>
         </GlassCard>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={refreshCommunity}
-            colors={['#3498db']}
-            tintColor="#3498db"
-          />
-        }
-        showsVerticalScrollIndicator={false}
-      >
         {contacts.length === 0 ? (
           <GlassCard style={styles.emptyStateCard}>
             <View style={styles.emptyState}>
@@ -563,23 +541,36 @@ const MyCommunityScreen = () => {
                           </Text>
                         </View>
                         <View style={styles.contactInfo}>
-                          <Text style={[styles.contactName, { color: theme.text }]}>{contact.name}</Text>
+                          <Text style={[styles.contactName, { color: theme.text }]} numberOfLines={1}>
+                            {contact.name}
+                          </Text>
                           <View style={styles.statusRow}>
-                            <Ionicons 
-                              name={statusInfo.icon as any} 
-                              size={12} 
-                              color={statusInfo.color} 
+                            <Ionicons
+                              name={statusInfo.icon as keyof typeof Ionicons.glyphMap}
+                              size={12}
+                              color={statusInfo.color}
                             />
-                            <Text style={[styles.statusText, { color: statusInfo.color }]}>
+                            <Text
+                              style={[styles.statusText, { color: statusInfo.color }]}
+                              numberOfLines={1}
+                            >
                               {statusInfo.text}
                             </Text>
                             {locationData && locationData.status !== 'not_sharing' && (
-                              <Text style={[styles.locationTime, { color: theme.textSecondary }]}>
+                              <Text
+                                style={[styles.locationTime, { color: theme.textSecondary }]}
+                                numberOfLines={1}
+                              >
                                 • {getLocationAge(locationData.location.timestamp)}
                               </Text>
                             )}
                           </View>
-                          <Text style={[styles.relationshipText, { color: theme.textSecondary }]}>{contact.relationship}</Text>
+                          <Text
+                            style={[styles.relationshipText, { color: theme.textSecondary }]}
+                            numberOfLines={1}
+                          >
+                            {contact.relationship}
+                          </Text>
                         </View>
                       </View>
                       
@@ -604,16 +595,6 @@ const MyCommunityScreen = () => {
           </View>
         )}
 
-        {/* Add Contact FAB */}
-        {contacts.length > 0 && (
-          <TouchableOpacity
-            style={styles.addContactFAB}
-            onPress={openContactImportModal}
-          >
-            <Ionicons name="person-add" size={24} color="#fff" />
-          </TouchableOpacity>
-        )}
-
         {/* Safety Tips */}
         {contacts.length > 0 && (
           <GlassCard style={styles.tipsSection}>
@@ -635,6 +616,15 @@ const MyCommunityScreen = () => {
           </GlassCard>
         )}
       </ScrollView>
+
+      {contacts.length > 0 && (
+        <TouchableOpacity
+          style={[styles.addContactFAB, { backgroundColor: theme.primary }]}
+          onPress={openContactImportModal}
+        >
+          <Ionicons name="person-add" size={24} color={theme.textOnPrimary} />
+        </TouchableOpacity>
+      )}
 
       {/* Map Modal */}
       <Modal
@@ -723,7 +713,14 @@ const MyCommunityScreen = () => {
         </View>
       </Modal>
 
-      {/* Simplified - No contact import modal needed */}
+      <AddEmergencyContactModal
+        visible={isContactModalVisible}
+        value={newContact}
+        onChange={setNewContact}
+        onClose={() => setIsContactModalVisible(false)}
+        onSave={submitNewEmergencyContact}
+        saving={isSavingContact}
+      />
     </Screen>
   );
 };
@@ -759,68 +756,50 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#7f8c8d',
   },
-  header: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 44 : 20,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 16,
-  },
   headerCard: {
-    borderRadius: 16,
-    overflow: 'hidden',
+    marginHorizontal: 16,
+    marginTop: Platform.OS === 'ios' ? 8 : 12,
+    marginBottom: 16,
   },
   headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    gap: 12,
   },
   headerLeft: {
     flex: 1,
+    minWidth: 0,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#2c3e50',
+    fontSize: 24,
+    fontWeight: '700',
     marginBottom: 4,
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: '#7f8c8d',
+    fontSize: 13,
+    lineHeight: 18,
   },
   shareButton: {
-    backgroundColor: '#3498db',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#3498db',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    borderWidth: 1,
+    flexShrink: 0,
   },
   shareButtonText: {
-    color: '#fff',
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 4,
   },
   scrollView: {
     flex: 1,
-    paddingTop: Platform.OS === 'ios' ? 130 : 110, // Account for fixed header
+  },
+  scrollContent: {
+    paddingTop: Platform.OS === 'ios' ? 16 : 12,
+    paddingBottom: 120,
   },
   emptyState: {
     justifyContent: 'center',
@@ -873,14 +852,11 @@ const styles = StyleSheet.create({
   },
   communityList: {
     paddingHorizontal: 16,
-    paddingTop: 16,
   },
   contactCard: {
-    marginHorizontal: 16,
     marginBottom: 12,
   },
   contactTouchable: {
-    padding: 16,
     borderRadius: 16,
   },
   contactContent: {
@@ -907,34 +883,37 @@ const styles = StyleSheet.create({
   },
   contactInfo: {
     flex: 1,
+    minWidth: 0,
   },
   contactName: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#2c3e50',
     marginBottom: 4,
   },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 4,
+    flexWrap: 'wrap',
+    gap: 4,
   },
   statusText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     marginLeft: 4,
+    flexShrink: 1,
   },
   locationTime: {
     fontSize: 12,
-    color: '#7f8c8d',
-    marginLeft: 4,
+    flexShrink: 1,
   },
   relationshipText: {
     fontSize: 12,
-    color: '#7f8c8d',
   },
   contactRight: {
     alignItems: 'center',
+    marginLeft: 8,
+    flexShrink: 0,
   },
   batteryContainer: {
     flexDirection: 'row',
@@ -947,26 +926,13 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   tipsSection: {
-    backgroundColor: '#fff',
-    margin: 16,
-    borderRadius: 12,
-    padding: 20,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 24,
   },
   tipsSectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#2c3e50',
     marginBottom: 16,
   },
   tipsContainer: {
@@ -978,7 +944,6 @@ const styles = StyleSheet.create({
   },
   tipText: {
     fontSize: 14,
-    color: '#7f8c8d',
     marginLeft: 8,
     flex: 1,
   },
@@ -1047,15 +1012,14 @@ const styles = StyleSheet.create({
     color: '#7f8c8d',
     marginLeft: 8,
   },
-  // Contact Management Styles
   addContactFAB: {
     position: 'absolute',
     right: 20,
-    bottom: 20,
+    bottom: Platform.OS === 'ios' ? 100 : 88,
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#3498db',
+    zIndex: 200,
     justifyContent: 'center',
     alignItems: 'center',
     ...Platform.select({

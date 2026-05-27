@@ -1,3 +1,6 @@
+# Dispatch server persisted dev state
+server/data/store.json
+
 # Dependencies
 node_modules/
 npm-debug.log*
@@ -27,6 +30,7 @@ yarn-error.*
 
 # macOS
 .DS_Store
+._*
 *.pem
 
 # local env files
