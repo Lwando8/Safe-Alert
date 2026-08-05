@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Allow LAN access during local development (phone / other machines).
+  allowedDevOrigins: ["192.168.0.44", "localhost"],
 };
 
 export default nextConfig;
