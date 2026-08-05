@@ -37,14 +37,13 @@ Billing/Blaze is blocked for Functions deploy; rules can still advance tenant sa
 - Remove root `auth != null` open read/write
 - `liveUnits` / `incidentTracks` → client deny (Admin/Functions only)
 
-## Deploy (Spark-compatible)
+## Deploy status
 
-```bash
-cd firebase
-../node_modules/.bin/firebase deploy --only firestore:rules,database --project seren-sos
-```
-
-Functions / Secret Manager / Cloud Run still need **Blaze** (deferred).
+| Target | Status |
+|---|---|
+| Firestore rules → `seren-sos` | **Deployed** 2026-08-05 |
+| RTDB rules | In repo only — project has **no Realtime Database instance** yet (`firebase init database` when needed) |
+| Cloud Functions | Deferred (Blaze) |
 
 ## Follow-ons (not in 2E)
 

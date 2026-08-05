@@ -1,48 +1,15 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.assertMembershipPayload = exports.derivePermissions = exports.mapRoleToKind = exports.MembershipSyncService = void 0;
-const admin = __importStar(require("firebase-admin"));
 const clerk_sdk_node_1 = require("@clerk/clerk-sdk-node");
 const membershipMapping_1 = require("./membershipMapping");
 Object.defineProperty(exports, "assertMembershipPayload", { enumerable: true, get: function () { return membershipMapping_1.assertMembershipPayload; } });
 Object.defineProperty(exports, "derivePermissions", { enumerable: true, get: function () { return membershipMapping_1.derivePermissions; } });
 Object.defineProperty(exports, "mapRoleToKind", { enumerable: true, get: function () { return membershipMapping_1.mapRoleToKind; } });
+const firebaseApps_1 = require("../firebaseApps");
 // Clerk SDK typings lag runtime org membership APIs used here.
 const clerk = (0, clerk_sdk_node_1.Clerk)({ secretKey: process.env.CLERK_SECRET_KEY });
-const db = admin.firestore();
+const db = (0, firebaseApps_1.getDb)();
 /**
  * Service for syncing Clerk organization memberships to Firestore.
  * Failures must not leave partially trusted memberships (no write without site).

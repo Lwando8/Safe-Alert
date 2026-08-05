@@ -18,11 +18,10 @@ import {
   loadIncidentInTenant,
   registerTenantPushToken,
 } from './incidents/tenantIncidentService';
+import { getAuth, getDb, getRtdb } from './firebaseApps';
 
-admin.initializeApp();
-const db = admin.firestore();
-const rtdb = admin.database();
-const auth = admin.auth();
+const db = getDb();
+const auth = getAuth();
 
 export { clerkWebhook };
 
@@ -200,7 +199,7 @@ export const appendIncidentLocation = onCall(async req => {
   }
 
   await ref.set({ lastLocation: location, updatedAt: now() }, { merge: true });
-  await rtdb.ref(`incidentTracks/${incidentId}/points`).push({
+  await getRtdb().ref(`incidentTracks/${incidentId}/points`).push({
     lat: location.latitude,
     lng: location.longitude,
     t: now(),
@@ -513,7 +512,7 @@ export const unitHeartbeat = onCall(async req => {
   requireFirebaseRole(req, ['RESPONDER_UNIT']);
   const { unitCode, status, location } = req.data || {};
   if (!unitCode || !status) throw new HttpsError('invalid-argument', 'unitCode and status required');
-  await rtdb.ref(`liveUnits/${unitCode}`).set({
+  await getRtdb().ref(`liveUnits/${unitCode}`).set({
     lat: location?.latitude ?? null,
     lng: location?.longitude ?? null,
     status,

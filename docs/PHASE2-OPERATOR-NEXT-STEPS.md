@@ -15,7 +15,7 @@ Local IDE preview / port-forward is **non-blocking**. Focus here.
 | `npm run preflight:clerk` | **`keys_ready`** (webhook secret still missing — expected pre-deploy) |
 | Firebase project | **`seren-sos`** (`.firebaserc` set; CLI logged in as project owner) |
 | Phase 2E client security rules (Firestore/RTDB deny) | Done in repo — deploy with `firebase deploy --only firestore:rules,database` |
-| Firebase Functions / Cloud Run deploy | **Deferred** — needs **Blaze** billing on `seren-sos` |
+| Firebase Functions / Cloud Run deploy | **Deployed** to `seren-sos` (us-central1) |
 | Vercel preview from Expo monorepo root | Skipped via `ignoreCommand`; set Root Directory=`apps/web` in dashboard |
 | Mobile Clerk cutover / remove Firebase fallback | Deferred (removal gate) |
 
@@ -90,14 +90,19 @@ Dashboard (cannot be done from repo alone):
 1. ~~Phase 2E security rules~~ (this slice)  
 2. Next candidates: platform orgs shell → real read model; ops shell wiring; geo-radius on `getNearbyIncidents`; mobile Clerk prep (code only)  
 
-## Agent cannot proceed until you provide
+## Deployed endpoints
 
-1. ~~Firebase project id~~ → **`seren-sos`** recorded in `firebase/.firebaserc`  
-2. ~~Auth~~ → Firebase CLI logged in (use `./node_modules/.bin/firebase`, not bare `firebase`)  
-3. **Billing** — upgrade **`seren-sos`** to the **Blaze (pay-as-you-go)** plan and link a billing account:  
-   https://console.firebase.google.com/project/seren-sos/usage/details  
-   Required APIs that need billing: Cloud Build, Artifact Registry, Cloud Run, Secret Manager  
-4. After deploy: **`CLERK_WEBHOOK_SECRET`**
+- **clerkWebhook:** https://us-central1-seren-sos.cloudfunctions.net/clerkWebhook  
+- Callables live in **us-central1** (`createIncident`, `listOrgIncidents`, `registerPushToken`, …)
+
+## Operator remaining
+
+1. Clerk Dashboard → Webhooks → endpoint = clerkWebhook URL above  
+   Subscribe: `organizationMembership.created|updated|deleted`, `organization.created|updated`  
+2. Set `CLERK_WEBHOOK_SECRET=whsec_...` in `firebase/functions/.env` / `.env.seren-sos` and redeploy  
+   (`./node_modules/.bin/firebase deploy --only functions:clerkWebhook --project seren-sos`)  
+3. `npm run preflight:clerk` → expect **`ready`**  
+4. Run live Clerk checklist
 
 ### CLI reminder (this repo)
 

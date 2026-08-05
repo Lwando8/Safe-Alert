@@ -2,9 +2,9 @@ import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { RequestContext } from '../middleware/requestContext';
 import { authorize, requireTenantMatch } from '../middleware/requestContext';
+import { getDb, getRtdb } from '../firebaseApps';
 
-const db = admin.firestore();
-const rtdb = admin.database();
+const db = getDb();
 
 export type IncidentType = 'sos' | 'medical' | 'security';
 
@@ -72,7 +72,7 @@ export async function createTenantIncident(
     authProvider: context.authProvider,
     timestamp: now,
   });
-  await rtdb.ref(`incidentTracks/${incidentId}/points`).push({
+  await getRtdb().ref(`incidentTracks/${incidentId}/points`).push({
     lat: input.location.latitude,
     lng: input.location.longitude,
     t: now,

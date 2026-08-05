@@ -43,10 +43,9 @@ const IdentityLinkService_1 = require("./services/IdentityLinkService");
 const clerkWebhook_1 = require("./http/clerkWebhook");
 Object.defineProperty(exports, "clerkWebhook", { enumerable: true, get: function () { return clerkWebhook_1.clerkWebhook; } });
 const tenantIncidentService_1 = require("./incidents/tenantIncidentService");
-admin.initializeApp();
-const db = admin.firestore();
-const rtdb = admin.database();
-const auth = admin.auth();
+const firebaseApps_1 = require("./firebaseApps");
+const db = (0, firebaseApps_1.getDb)();
+const auth = (0, firebaseApps_1.getAuth)();
 /** Legacy Firebase-claim helpers — only for unmigrated callables */
 function requireFirebaseAuth(ctx) {
     if (!ctx.auth)
@@ -208,7 +207,7 @@ exports.appendIncidentLocation = (0, https_1.onCall)(async (req) => {
         ]);
     }
     await ref.set({ lastLocation: location, updatedAt: now() }, { merge: true });
-    await rtdb.ref(`incidentTracks/${incidentId}/points`).push({
+    await (0, firebaseApps_1.getRtdb)().ref(`incidentTracks/${incidentId}/points`).push({
         lat: location.latitude,
         lng: location.longitude,
         t: now(),
@@ -482,7 +481,7 @@ exports.unitHeartbeat = (0, https_1.onCall)(async (req) => {
     const { unitCode, status, location } = req.data || {};
     if (!unitCode || !status)
         throw new https_1.HttpsError('invalid-argument', 'unitCode and status required');
-    await rtdb.ref(`liveUnits/${unitCode}`).set({
+    await (0, firebaseApps_1.getRtdb)().ref(`liveUnits/${unitCode}`).set({
         lat: location?.latitude ?? null,
         lng: location?.longitude ?? null,
         status,

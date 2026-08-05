@@ -1,7 +1,7 @@
-import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
+import { getDb } from '../firebaseApps';
 
-const db = admin.firestore();
+const db = getDb();
 
 export interface MembershipRecord {
   id: string;

@@ -1,4 +1,3 @@
-import * as admin from 'firebase-admin';
 import { Clerk } from '@clerk/clerk-sdk-node';
 import {
   assertMembershipPayload,
@@ -7,10 +6,11 @@ import {
   type MembershipKind,
   type MembershipStatus,
 } from './membershipMapping';
+import { getDb } from '../firebaseApps';
 
 // Clerk SDK typings lag runtime org membership APIs used here.
 const clerk = Clerk({ secretKey: process.env.CLERK_SECRET_KEY }) as any;
-const db = admin.firestore();
+const db = getDb();
 
 /**
  * Firestore membership schema
