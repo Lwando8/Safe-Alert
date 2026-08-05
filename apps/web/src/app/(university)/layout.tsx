@@ -21,7 +21,8 @@ export default function UniversityLayout({
         brand="University Ops"
         brandHref="/ops"
         items={navItems}
-        footer="Organization-scoped control room · Phase 1 shell"
+        showOrgSwitcher
+        footer="Organization-scoped control room · Phase 2 active"
       />
       <div className="flex min-w-0 flex-1 flex-col">{children}</div>
     </div>

@@ -1,0 +1,22 @@
+{
+  "rules": {
+    ".read": "auth != null",
+    ".write": "auth != null",
+    "liveUnits": {
+      "$unitCode": {
+        ".read": "auth != null && (auth.token.role === 'RESPONDER_UNIT' || auth.token.role === 'DISPATCHER' || auth.token.role === 'SUPER_ADMIN')",
+        ".write": "auth != null && auth.token.role === 'RESPONDER_UNIT'"
+      }
+    },
+    "incidentTracks": {
+      "$incidentId": {
+        ".read": "auth != null",
+        "points": {
+          "$pushId": {
+            ".write": "auth != null"
+          }
+        }
+      }
+    }
+  }
+}

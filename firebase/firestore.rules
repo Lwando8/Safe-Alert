@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function hasRole(role) {
+      return isAuth() && request.auth.token.role == role;
+    }
+
+    function isAdmin() {
+      return hasRole('DISPATCHER') || hasRole('SUPER_ADMIN');
+    }
+
+    function isResponder() {
+      return hasRole('RESPONDER_UNIT');
+    }
+
+    function isCitizen() {
+      return hasRole('CITIZEN') || request.auth.token.role == null;
+    }
+
+    match /users/{uid} {
+      allow read: if isAuth() && (request.auth.uid == uid || isAdmin());
+      allow write: if false;
+
+      match /emergencyContacts/{contactId} {
+        allow read: if isAuth() && (request.auth.uid == uid || isAdmin());
+        allow write: if isAuth() && request.auth.uid == uid;
+      }
+
+      match /medical/{docId} {
+        allow read: if isAuth() && (request.auth.uid == uid || isAdmin());
+        allow write: if isAuth() && request.auth.uid == uid;
+      }
+    }
+
+    match /incidents/{incidentId} {
+      allow read: if isAdmin() || isResponder() || (isAuth() && resource.data.userId == request.auth.uid);
+      allow write: if false;
+
+      match /timeline/{eventId} {
+        allow read: if isAdmin() || isResponder() || (isAuth() && get(/databases/$(database)/documents/incidents/$(incidentId)).data.userId == request.auth.uid);
+        allow write: if false;
+      }
+    }
+
+    match /responderUnits/{unitId} {
+      allow read: if isAdmin() || isResponder();
+      allow write: if isAdmin();
+    }
+
+    match /shifts/{shiftId} {
+      allow read: if isAdmin() || isResponder();
+      allow write: if isAdmin() || isResponder();
+    }
+
+    match /operationalDevices/{deviceId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /fcmTokens/{uid}/devices/{deviceId} {
+      allow read: if isAuth() && (request.auth.uid == uid || isAdmin());
+      allow write: if isAuth() && request.auth.uid == uid;
+    }
+  }
+}

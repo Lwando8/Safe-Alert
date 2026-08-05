@@ -1,0 +1,23 @@
+{
+  "name": "safe-alert-firebase-functions",
+  "private": true,
+  "engines": {
+    "node": "20"
+  },
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "serve": "npm run build && firebase emulators:start --only functions,firestore,database,auth --config ../firebase.json",
+    "deploy": "npm run build && firebase deploy --only functions --config ../firebase.json",
+    "seed": "npm run build && node lib/scripts/seed.js"
+  },
+  "dependencies": {
+    "@clerk/clerk-sdk-node": "^4.13.23",
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.0.1",
+    "svix": "^1.99.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}

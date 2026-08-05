@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 
 export type ShellNavItem = {
@@ -14,6 +15,8 @@ type ShellNavProps = {
   className?: string;
   /** Platform super-admin uses a darker chrome, separate from university ops */
   variant?: "university" | "platform";
+  /** Show organization switcher in nav footer */
+  showOrgSwitcher?: boolean;
 };
 
 export function ShellNav({
@@ -23,6 +26,7 @@ export function ShellNav({
   footer,
   className,
   variant = "university",
+  showOrgSwitcher = false,
 }: ShellNavProps) {
   return (
     <aside
@@ -55,16 +59,54 @@ export function ShellNav({
           </Link>
         ))}
       </nav>
-      {footer ? (
+      {showOrgSwitcher || footer ? (
         <div
           className={cn(
-            "border-t p-4 text-xs",
+            "border-t p-4",
             variant === "platform"
-              ? "border-white/10 text-white/55"
-              : "border-sidebar-border text-muted-foreground",
+              ? "border-white/10"
+              : "border-sidebar-border",
           )}
         >
-          {footer}
+          {showOrgSwitcher && (
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <OrganizationSwitcher
+                hidePersonal={variant === "university"}
+                afterSelectOrganizationUrl="/ops"
+                afterCreateOrganizationUrl="/ops"
+                appearance={{
+                  elements: {
+                    rootBox: "flex-1",
+                    organizationSwitcherTrigger: cn(
+                      "border rounded-md px-3 py-2 text-sm w-full justify-start",
+                      variant === "platform"
+                        ? "border-white/20 hover:bg-white/10"
+                        : "border-border hover:bg-accent",
+                    ),
+                  },
+                }}
+              />
+              <UserButton
+                appearance={{
+                  elements: {
+                    userButtonBox: "scale-110",
+                  },
+                }}
+              />
+            </div>
+          )}
+          {footer && (
+            <div
+              className={cn(
+                "text-xs",
+                variant === "platform"
+                  ? "text-white/55"
+                  : "text-muted-foreground",
+              )}
+            >
+              {footer}
+            </div>
+          )}
         </div>
       ) : null}
     </aside>
