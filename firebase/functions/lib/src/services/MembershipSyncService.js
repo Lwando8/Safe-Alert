@@ -33,23 +33,26 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MembershipSyncService = void 0;
+exports.assertMembershipPayload = exports.derivePermissions = exports.mapRoleToKind = exports.MembershipSyncService = void 0;
 const admin = __importStar(require("firebase-admin"));
 const clerk_sdk_node_1 = require("@clerk/clerk-sdk-node");
+const membershipMapping_1 = require("./membershipMapping");
+Object.defineProperty(exports, "assertMembershipPayload", { enumerable: true, get: function () { return membershipMapping_1.assertMembershipPayload; } });
+Object.defineProperty(exports, "derivePermissions", { enumerable: true, get: function () { return membershipMapping_1.derivePermissions; } });
+Object.defineProperty(exports, "mapRoleToKind", { enumerable: true, get: function () { return membershipMapping_1.mapRoleToKind; } });
 // Clerk SDK typings lag runtime org membership APIs used here.
 const clerk = (0, clerk_sdk_node_1.Clerk)({ secretKey: process.env.CLERK_SECRET_KEY });
 const db = admin.firestore();
 /**
- * Service for syncing Clerk organization memberships to Firestore
+ * Service for syncing Clerk organization memberships to Firestore.
+ * Failures must not leave partially trusted memberships (no write without site).
  */
 class MembershipSyncService {
-    /**
-     * Sync a Clerk organization membership to Firestore
-     * Creates new membership or updates existing one
-     */
-    static async syncMembership(clerkMembershipId) {
+    static async syncMembership(clerkMembershipId, options) {
+        if (!clerkMembershipId) {
+            throw new Error('Missing membership id');
+        }
         console.log('Syncing membership:', clerkMembershipId);
-        // Get membership from Clerk
         const clerkMembership = await clerk.organizationMemberships.getOrganizationMembership({
             organizationMembershipId: clerkMembershipId,
         });
@@ -58,20 +61,27 @@ class MembershipSyncService {
         if (!publicUserData?.userId) {
             throw new Error('Membership has no user data');
         }
-        // Map Clerk role to our membership kind
-        const kind = this.mapRoleToKind(clerkRole);
-        // Derive permissions from role
-        const permissions = this.derivePermissions(clerkRole, kind);
-        // Check if membership already exists
+        if (!organization?.id) {
+            throw new Error('Membership has no organization');
+        }
+        const kind = (0, membershipMapping_1.mapRoleToKind)(clerkRole);
+        const permissions = (0, membershipMapping_1.derivePermissions)(clerkRole, kind);
+        const orgSlug = String(organization.slug || organization.id);
+        (0, membershipMapping_1.assertMembershipPayload)({
+            clerkMembershipId,
+            clerkOrganizationId: organization.id,
+            organizationId: orgSlug,
+            userId: publicUserData.userId,
+        });
         const existingSnap = await db
             .collection('memberships')
             .where('clerkMembershipId', '==', clerkMembershipId)
             .limit(1)
             .get();
-        const orgSlug = String(organization.slug || organization.id);
         const membershipData = {
             clerkMembershipId,
             clerkOrganizationId: organization.id,
+            // Preserve tenant id from org slug; never trust client overrides
             organizationId: orgSlug,
             userId: publicUserData.userId,
             kind,
@@ -81,33 +91,44 @@ class MembershipSyncService {
             updatedAt: Date.now(),
         };
         if (existingSnap.empty) {
-            // Create new membership
-            const membershipRef = db.collection('memberships').doc();
-            membershipData.id = membershipRef.id;
-            membershipData.createdAt = Date.now();
-            // Set default site (first site of organization)
             const siteId = await this.getDefaultSiteId(orgSlug);
             if (!siteId) {
                 console.warn('No default site found for org:', orgSlug);
                 throw new Error('Organization must have at least one site configured');
             }
+            const membershipRef = db.collection('memberships').doc();
+            membershipData.id = membershipRef.id;
+            membershipData.createdAt = Date.now();
             membershipData.siteId = siteId;
             await membershipRef.set(membershipData);
             console.log('Created membership:', membershipRef.id);
             return membershipRef.id;
         }
-        else {
-            // Update existing membership
-            const membershipRef = existingSnap.docs[0].ref;
-            await membershipRef.update(membershipData);
-            console.log('Updated membership:', membershipRef.id);
-            return membershipRef.id;
+        const existing = existingSnap.docs[0];
+        const existingData = existing.data();
+        // Preserve existing siteId and never rewrite organizationId to a different tenant
+        if (existingData.organizationId && existingData.organizationId !== orgSlug) {
+            throw new Error(`Tenant ID conflict: membership ${clerkMembershipId} maps to ${existingData.organizationId} but Clerk org slug is ${orgSlug}`);
         }
+        // created → force active; updated → preserve local suspended/revoked
+        const nextStatus = options?.forceActive
+            ? 'active'
+            : existingData.status === 'suspended' || existingData.status === 'revoked'
+                ? existingData.status
+                : 'active';
+        await existing.ref.update({
+            ...membershipData,
+            status: nextStatus,
+            siteId: existingData.siteId,
+            organizationId: existingData.organizationId || orgSlug,
+        });
+        console.log('Updated membership:', existing.id);
+        return existing.id;
     }
-    /**
-     * Revoke membership (soft delete)
-     */
     static async revokeMembership(clerkMembershipId) {
+        if (!clerkMembershipId) {
+            throw new Error('Missing membership id');
+        }
         console.log('Revoking membership:', clerkMembershipId);
         const membershipSnap = await db
             .collection('memberships')
@@ -122,86 +143,32 @@ class MembershipSyncService {
             console.log('Membership revoked');
         }
         else {
-            console.warn('Membership not found for revocation');
+            // Unknown membership — fail closed without creating a partial record
+            console.warn('Membership not found for revocation; no write performed');
         }
     }
-    /**
-     * Update membership last seen timestamp
-     */
+    static async suspendMembership(clerkMembershipId) {
+        if (!clerkMembershipId) {
+            throw new Error('Missing membership id');
+        }
+        const membershipSnap = await db
+            .collection('memberships')
+            .where('clerkMembershipId', '==', clerkMembershipId)
+            .limit(1)
+            .get();
+        if (membershipSnap.empty) {
+            throw new Error('Membership not found for suspension');
+        }
+        await membershipSnap.docs[0].ref.update({
+            status: 'suspended',
+            updatedAt: Date.now(),
+        });
+    }
     static async updateLastSeen(membershipId) {
         await db.collection('memberships').doc(membershipId).update({
             lastSeenAt: Date.now(),
         });
     }
-    /**
-     * Map Clerk role to membership kind
-     */
-    static mapRoleToKind(clerkRole) {
-        const roleMap = {
-            'org:admin': 'org_admin',
-            'org:supervisor': 'control_room',
-            'org:responder': 'security_guard',
-            'org:staff': 'staff',
-            'org:student': 'student',
-        };
-        return roleMap[clerkRole] || 'student';
-    }
-    /**
-     * Derive permissions from role and kind
-     */
-    static derivePermissions(clerkRole, kind) {
-        const permissionMap = {
-            'org:admin': [
-                'incidents:create',
-                'incidents:read-all',
-                'incidents:assign',
-                'incidents:update',
-                'incidents:close',
-                'responders:read',
-                'responders:manage',
-                'sites:read',
-                'sites:manage',
-                'memberships:read',
-                'memberships:manage',
-                'analytics:read',
-                'audit:read',
-                'organization:manage',
-            ],
-            'org:supervisor': [
-                'incidents:create',
-                'incidents:read-all',
-                'incidents:assign',
-                'incidents:update',
-                'incidents:close',
-                'responders:read',
-                'responders:manage',
-                'sites:read',
-                'analytics:read',
-                'audit:read',
-            ],
-            'org:responder': [
-                'incidents:read-all',
-                'incidents:acknowledge',
-                'incidents:update',
-                'responders:read',
-                'sites:read',
-            ],
-            'org:staff': [
-                'incidents:create',
-                'incidents:read-own',
-                'sites:read',
-            ],
-            'org:student': [
-                'incidents:create',
-                'incidents:read-own',
-                'sites:read',
-            ],
-        };
-        return permissionMap[clerkRole] || ['incidents:create', 'incidents:read-own'];
-    }
-    /**
-     * Get default site ID for organization
-     */
     static async getDefaultSiteId(organizationId) {
         const sitesSnap = await db
             .collection('sites')
@@ -215,11 +182,11 @@ class MembershipSyncService {
         }
         return sitesSnap.docs[0].id;
     }
-    /**
-     * Ensure organization + default site exist (for webhook organization.created / bootstrap).
-     */
     static async ensureOrganizationAndDefaultSite(params) {
         const { clerkOrganizationId, organizationId, name } = params;
+        if (!clerkOrganizationId || !organizationId) {
+            throw new Error('organization id and slug are required');
+        }
         const now = Date.now();
         await db.doc(`organizations/${organizationId}`).set({
             id: organizationId,
@@ -245,9 +212,6 @@ class MembershipSyncService {
         });
         return siteRef.id;
     }
-    /**
-     * Bulk sync all members of an organization
-     */
     static async syncOrganizationMembers(clerkOrganizationId) {
         console.log('Syncing all members for org:', clerkOrganizationId);
         const organization = await clerk.organizations.getOrganization({

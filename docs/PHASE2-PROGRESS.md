@@ -1,9 +1,9 @@
 # PHASE 2 — MEMBERSHIP SYSTEM IMPLEMENTATION PROGRESS
 
 **Date Started**: 2026-08-05  
-**Status**: IN PROGRESS — Phase 2B tenant-scoped backend landed (partially verified)
+**Status**: IN PROGRESS — Phase 2B tenant incident verification slice complete (**tenant-safe but partially verified**)
 
-**Phase 2B stop-gate**: **partially verified** — migrated APIs enforce org via `RequestContext`; dual-auth bridge still enabled; mobile not on Clerk; automated cross-tenant suite deferred to 2D. See [PHASE2B-DUAL-AUTH-BRIDGE.md](./PHASE2B-DUAL-AUTH-BRIDGE.md).
+**Phase 2B stop-gate**: **tenant-safe but partially verified** — migrated APIs + `/ops/incidents` enforce org via server membership; Firebase emulator probes 8/8; Clerk live path externally blocked; Firebase fallback still required for mobile. See [PHASE2B-STOP-GATE-REPORT.md](./PHASE2B-STOP-GATE-REPORT.md).
 
 ---
 
@@ -98,10 +98,10 @@
 - [x] Create webhook endpoint function (`clerkWebhook`) ✅
 - [x] Bootstrap callable (`bootstrapOrganizationMemberships`) ✅
 - [x] Identity link callable (`linkIdentity`, Clerk/platform only) ✅
+- [x] Idempotent webhook receipts + org.updated + automated webhook tests ✅
 - [ ] Deploy webhook function — operator step
 - [ ] Configure Clerk webhooks in Dashboard — operator step
-- [ ] Test membership sync — operator step
-- [ ] Test webhook delivery — operator step
+- [ ] Live Clerk webhook delivery — externally blocked without secrets
 
 ### 14. Data Layer Tenant Scoping (incidents + push)
 - [x] Add `organizationId` + `siteId` on incident create ✅
@@ -109,16 +109,17 @@
 - [x] Update incident queries with org filter ✅
 - [x] Add `organizationId` to FCM / `orgDevices` token index ✅
 - [x] Update notification trigger with org filter ✅
+- [x] `listOrgIncidents` + `/ops/incidents` wired to tenant backend ✅
 - [ ] Backfill existing data (if any) — operator step
 
-### 15. Testing & Verification (2B smoke, not full 2D)
+### 15. Testing & Verification (2B verification slice)
 - [x] Smoke script + verification matrix (`scripts/phase2b-smoke.ts`) ✅
 - [x] Local policy assertions (cross-tenant deny) ✅
-- [ ] Create two test organizations (University A, University B) — operator
-- [ ] Create test users with memberships + identityLinks — operator
-- [ ] Live cross-tenant isolation probes — operator / Phase 2D
-- [ ] Automated cross-tenant suite — Phase 2D
-
+- [x] Vitest isolation + webhook suite (33 tests) ✅
+- [x] Emulator University A/B fixtures (`seed-phase2b-tenants`) ✅
+- [x] Emulator cross-tenant probe (`probe:phase2b`, 8/8) ✅
+- [ ] Live Clerk organization probes — externally blocked (no keys in agent env)
+- [ ] Physical-device iOS/Android — removal gate
 ---
 
 ## 🚧 IN PROGRESS

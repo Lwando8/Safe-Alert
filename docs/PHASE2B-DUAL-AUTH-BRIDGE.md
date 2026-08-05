@@ -1,7 +1,7 @@
 # Phase 2B — Dual-Auth Bridge (Temporary Technical Debt)
 
 **Status:** Active during Phase 2B  
-**Stop-gate classification after 2B:** **partially verified** (not yet tenant-safe for multi-university production)
+**Stop-gate classification after this verification slice:** **tenant-safe but partially verified**
 
 ## Purpose
 
@@ -16,13 +16,14 @@ Keep the live mobile Firebase Auth path working while making the **server** the 
 5. Fail closed on missing / duplicate / conflicting `identityLinks`.
 6. Feature flag: `ALLOW_FIREBASE_AUTH_FALLBACK` (default `true` in 2B).
 7. Fallback limited to migrated callables (incidents + push token).
-8. No Firebase fallback on `/platform/*` or platform callables (`linkIdentity`, Clerk-required bootstrap).
+8. No Firebase fallback on `/platform/*`, platform callables (`linkIdentity`, Clerk-required bootstrap), or web `/ops/*` (Clerk session).
 9. One authorization policy — no separate Clerk vs Firebase permission trees.
 
 ## Migrated callables (bridge surface)
 
 - `createIncident`
 - `getNearbyIncidents`
+- `listOrgIncidents` (ops list; same tenant pipeline)
 - `appendIncidentLocation`
 - `acceptIncident`
 - `updateIncidentStatus`
@@ -44,29 +45,35 @@ Exactly one active link per `firebaseUid` and per `clerkUserId`. Conflicts → d
 
 ## Membership sync
 
-- HTTP: `clerkWebhook` (Svix-verified) → `MembershipSyncService`
+- HTTP: `clerkWebhook` (Svix-verified, idempotent `webhookReceipts/{svix-id}`) → `MembershipSyncService`
+- Events: `organizationMembership.created|updated|deleted`, `organization.created|updated`
 - Callable: `bootstrapOrganizationMemberships` (platform operator **or** `MEMBERSHIP_BOOTSTRAP_SECRET`)
+
+## `/ops/incidents`
+
+Uses Clerk session + active membership + `incidents:read-all`, then queries Firestore with **membership** `organizationId` only. Same authorization semantics as `listOrgIncidents`.
 
 ## Removal gate (delete Firebase fallback only when ALL are true)
 
-1. Mobile application authenticates with Clerk (not Firebase ID tokens for incident/push APIs).
-2. Physical-device incident creation and push registration pass on **iOS and Android**.
-3. No production Firebase-authenticated sessions remain on the migrated surface.
+> Remove Firebase authentication fallback only after the mobile application authenticates with Clerk, physical-device incident creation and push registration pass on iOS and Android, and no production Firebase-authenticated sessions remain.
 
 Until then, treat the bridge as **temporary debt**. After removal: set `ALLOW_FIREBASE_AUTH_FALLBACK=false`, delete `firebaseLegacyAdapter` usage, and re-run cross-tenant verification (Phase 2D).
 
-## Smoke
+## Smoke / tests
 
 ```bash
 cd firebase/functions
-SMOKE_CHECKLIST_ONLY=1 npx ts-node scripts/phase2b-smoke.ts   # print matrix
-npm run build && node -e "require('./lib/scripts/phase2b-smoke.js')"  # local policy asserts
+npm test
+npm run smoke:phase2b
+# With emulators:
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren npm run seed:phase2b
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren npm run probe:phase2b
 ```
 
 Core smoke: **University A must not read University B incidents.**
 
 ## After 2B
 
-- **2C** — harden `/ops` vs `/platform`, clear caches on org switch  
-- **2D** — automated cross-tenant tests  
-- **Stop-gate** — promote from **partially verified** → **tenant-safe** only after bridge removal + 2D
+- **2C** — harden `/ops` vs `/platform`, clear caches on org switch (partially addressed in incidents UI)
+- **2D** — expand automated suite / live Clerk CI
+- **Stop-gate** — promote to **tenant-safe and verified** only after bridge removal gate + live Clerk probes

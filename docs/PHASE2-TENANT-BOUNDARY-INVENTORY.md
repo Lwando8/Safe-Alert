@@ -1,29 +1,33 @@
 # PHASE 2 — ARCHITECTURAL INSPECTION AND TENANT-BOUNDARY INVENTORY
 
-**Document Version**: 1.0  
+**Document Version**: 1.1  
 **Date**: 2026-08-05  
-**Status**: Initial Inspection — Pre-Implementation
+**Status**: Updated after Phase 2B tenant incident verification slice
 
 ---
 
-## EXECUTIVE SUMMARY
+## EXECUTIVE SUMMARY (updated)
 
-This document provides a comprehensive inventory of the current Seren SOS architecture from a multi-tenant safety perspective. The system currently operates as a **single-tenant, public-style SOS application** with NO runtime tenant isolation.
+Phase 2B has moved the **migrated incident + push surface** and **`/ops/incidents`** onto server-authoritative `organizationId` resolution (Clerk-preferred, Firebase legacy adapter). Emulator isolation for University A/B passes.
 
-### Critical Finding
+### Critical Finding (remaining)
 
-**The system is NOT tenant-safe in its current state.** Multiple universities cannot be safely onboarded until Phase 2 tenant isolation is fully implemented and verified.
+**Production multi-university onboarding is still not safe.** Unmigrated callables, client Firestore rules, RTDB paths, and the Firebase Auth mobile bridge remain. Classification: **tenant-safe but partially verified** for the 2B slice only.
 
-### Architecture Status
+### Architecture Status (post-2B slice)
 
-- **Domain Types**: ✅ Excellent — already tenant-scoped with `organizationId`
-- **Authentication**: ⚠️ Partial — Firebase auth with custom claims, but no membership model
-- **Authorization**: ❌ Missing — role-based only, no organization boundary enforcement
-- **Data Persistence**: ❌ Unsafe — Firestore collections lack organization filtering
-- **API Layer**: ❌ Unsafe — Firebase Functions have role checks but no tenant scoping
-- **Mobile State**: ❌ Unsafe — client-side `providerId` without server validation
-- **Push Notifications**: ❌ Unsafe — broadcast to all devices, no tenant isolation
-- **Route Protection**: ⚠️ Partial — web routes exist but no auth/authorization
+- **Domain Types**: ✅ Tenant-scoped with `organizationId`
+- **Authentication**: ⚠️ Dual-auth bridge (Clerk preferred; Firebase legacy)
+- **Authorization (migrated APIs)**: ✅ Membership + permission + tenant match
+- **Authorization (unmigrated APIs)**: ❌ Still Firebase claims / global
+- **Data Persistence (callable Admin path)**: ✅ Org-filtered incidents/tokens
+- **Data Persistence (client rules)**: ❌ Still role-based, not org-filtered
+- **API Layer (migrated)**: ✅ Tenant-scoped
+- **`/ops/incidents`**: ✅ Wired to membership-scoped reads
+- **Push Notifications (migrated trigger)**: ✅ `orgDevices/{organizationId}/tokens`
+- **Route Protection (web)**: ✅ Clerk middleware for ops/platform when keys present
+
+> Historical sections below describe the pre-2B baseline. Prefer `PHASE2B-IMPLEMENTATION-NOTES.md` and `PHASE2B-STOP-GATE-REPORT.md` for current enforcement details.
 
 ---
 

@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.legacyApiProxy = exports.health = exports.unitHeartbeat = exports.endShift = exports.startShift = exports.linkIdentity = exports.bootstrapOrganizationMemberships = exports.onIncidentCreatedNotify = exports.registerPushToken = exports.assignUnitToIncident = exports.updateIncidentStatus = exports.acceptIncident = exports.getNearbyIncidents = exports.appendIncidentLocation = exports.createIncident = exports.loginAdmin = exports.loginResponder = exports.resolveDeviceAccess = exports.registerCitizen = exports.clerkWebhook = void 0;
+exports.legacyApiProxy = exports.health = exports.unitHeartbeat = exports.endShift = exports.startShift = exports.linkIdentity = exports.bootstrapOrganizationMemberships = exports.onIncidentCreatedNotify = exports.registerPushToken = exports.assignUnitToIncident = exports.updateIncidentStatus = exports.acceptIncident = exports.listOrgIncidents = exports.getNearbyIncidents = exports.appendIncidentLocation = exports.createIncident = exports.loginAdmin = exports.loginResponder = exports.resolveDeviceAccess = exports.registerCitizen = exports.clerkWebhook = void 0;
 const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-functions/v2/firestore");
@@ -42,6 +42,7 @@ const MembershipSyncService_1 = require("./services/MembershipSyncService");
 const IdentityLinkService_1 = require("./services/IdentityLinkService");
 const clerkWebhook_1 = require("./http/clerkWebhook");
 Object.defineProperty(exports, "clerkWebhook", { enumerable: true, get: function () { return clerkWebhook_1.clerkWebhook; } });
+const tenantIncidentService_1 = require("./incidents/tenantIncidentService");
 admin.initializeApp();
 const db = admin.firestore();
 const rtdb = admin.database();
@@ -61,18 +62,6 @@ function requireFirebaseRole(ctx, allowed, message = 'Insufficient permissions')
 }
 function now() {
     return Date.now();
-}
-function actorUid(context) {
-    return context.firebaseUid || context.userId;
-}
-async function loadIncidentInTenant(incidentId, context) {
-    const ref = db.doc(`incidents/${incidentId}`);
-    const snap = await ref.get();
-    if (!snap.exists)
-        throw new https_1.HttpsError('not-found', 'Incident not found');
-    const data = snap.data();
-    (0, requestContext_1.requireTenantMatch)(context, data.organizationId);
-    return { ref, data };
 }
 // ---------------------------------------------------------------------------
 // Unmigrated auth helpers (pre-bridge) — still Firebase claims
@@ -199,50 +188,9 @@ exports.loginAdmin = (0, https_1.onCall)(async (req) => {
 // ---------------------------------------------------------------------------
 exports.createIncident = (0, https_1.onCall)(async (req) => {
     const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
-    (0, requestContext_1.authorize)(context, { permission: 'incidents:create' });
-    // Never trust client organizationId / providerId as tenant
+    // Never trust client organizationId / providerId / siteId as tenant
     const { type, location, meta } = req.data || {};
-    if (!type || !location?.latitude || !location?.longitude) {
-        throw new https_1.HttpsError('invalid-argument', 'type and location are required');
-    }
-    if (!context.siteId) {
-        throw new https_1.HttpsError('failed-precondition', 'Membership has no site assignment');
-    }
-    const incidentId = db.collection('incidents').doc().id;
-    const incident = {
-        id: incidentId,
-        type: String(type),
-        status: 'open',
-        mapStatus: 'unassigned',
-        userId: context.userId,
-        organizationId: context.organizationId,
-        siteId: context.siteId,
-        zoneId: null,
-        providerId: context.organizationId,
-        location,
-        lastLocation: location,
-        createdAt: now(),
-        updatedAt: now(),
-        assignments: [],
-        meta: meta || {},
-    };
-    await db.doc(`incidents/${incidentId}`).set(incident);
-    await db.doc(`incidents/${incidentId}/timeline/${db.collection('_').doc().id}`).set({
-        eventType: 'incident_created',
-        incidentId,
-        userId: context.userId,
-        organizationId: context.organizationId,
-        authProvider: context.authProvider,
-        timestamp: now(),
-    });
-    await rtdb.ref(`incidentTracks/${incidentId}/points`).push({
-        lat: location.latitude,
-        lng: location.longitude,
-        t: now(),
-        uid: actorUid(context),
-        organizationId: context.organizationId,
-    });
-    return incident;
+    return (0, tenantIncidentService_1.createTenantIncident)(context, { type, location, meta });
 });
 exports.appendIncidentLocation = (0, https_1.onCall)(async (req) => {
     const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
@@ -250,7 +198,7 @@ exports.appendIncidentLocation = (0, https_1.onCall)(async (req) => {
     if (!incidentId || !location?.latitude || !location?.longitude) {
         throw new https_1.HttpsError('invalid-argument', 'incidentId and location are required');
     }
-    const { ref, data } = await loadIncidentInTenant(String(incidentId), context);
+    const { ref, data } = await (0, tenantIncidentService_1.loadIncidentInTenant)(String(incidentId), context);
     const isOwner = data.userId === context.userId;
     if (!isOwner) {
         (0, requestContext_1.authorizeAnyPermission)(context, [
@@ -264,23 +212,16 @@ exports.appendIncidentLocation = (0, https_1.onCall)(async (req) => {
         lat: location.latitude,
         lng: location.longitude,
         t: now(),
-        uid: actorUid(context),
+        uid: (0, tenantIncidentService_1.actorUid)(context),
         organizationId: context.organizationId,
     });
     return { ok: true };
 });
 exports.getNearbyIncidents = (0, https_1.onCall)(async (req) => {
     const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
-    (0, requestContext_1.authorize)(context, { permission: 'incidents:read-all' });
     // Ignore any client-supplied organizationId
     const { radiusKm = 25, incidentId } = req.data || {};
-    const list = await db
-        .collection('incidents')
-        .where('organizationId', '==', context.organizationId)
-        .where('status', '==', 'open')
-        .orderBy('createdAt', 'desc')
-        .limit(200)
-        .get();
+    const listed = await (0, tenantIncidentService_1.listTenantIncidents)(context, { status: 'open', limit: 200 });
     if (incidentId) {
         const unitSnap = await db
             .collection('responderUnits')
@@ -290,23 +231,32 @@ exports.getNearbyIncidents = (0, https_1.onCall)(async (req) => {
             .get();
         return {
             radiusKm,
-            organizationId: context.organizationId,
-            authProvider: context.authProvider,
+            organizationId: listed.organizationId,
+            authProvider: listed.authProvider,
             units: unitSnap.docs.map(d => ({
                 id: d.id,
                 ...d.data(),
                 canAssign: true,
                 onShift: true,
             })),
-            incidents: list.docs.map(d => d.data()),
+            incidents: listed.incidents,
         };
     }
     return {
         radiusKm,
-        organizationId: context.organizationId,
-        authProvider: context.authProvider,
-        incidents: list.docs.map(d => d.data()),
+        organizationId: listed.organizationId,
+        authProvider: listed.authProvider,
+        incidents: listed.incidents,
     };
+});
+/** Ops / control-room list — same tenant pipeline as getNearbyIncidents */
+exports.listOrgIncidents = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    const { status, limit } = req.data || {};
+    return (0, tenantIncidentService_1.listTenantIncidents)(context, {
+        status: typeof status === 'string' ? status : undefined,
+        limit: typeof limit === 'number' ? limit : 100,
+    });
 });
 exports.acceptIncident = (0, https_1.onCall)(async (req) => {
     const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
@@ -314,7 +264,7 @@ exports.acceptIncident = (0, https_1.onCall)(async (req) => {
     const { incidentId } = req.data || {};
     if (!incidentId)
         throw new https_1.HttpsError('invalid-argument', 'incidentId required');
-    const { ref, data } = await loadIncidentInTenant(String(incidentId), context);
+    const { ref, data } = await (0, tenantIncidentService_1.loadIncidentInTenant)(String(incidentId), context);
     const unitId = String(context.unitId || '');
     if (!unitId) {
         throw new https_1.HttpsError('failed-precondition', 'No responder unit bound to membership');
@@ -347,7 +297,7 @@ exports.updateIncidentStatus = (0, https_1.onCall)(async (req) => {
     const { incidentId, status } = req.data || {};
     if (!incidentId || !status)
         throw new https_1.HttpsError('invalid-argument', 'incidentId/status required');
-    const { ref, data } = await loadIncidentInTenant(String(incidentId), context);
+    const { ref, data } = await (0, tenantIncidentService_1.loadIncidentInTenant)(String(incidentId), context);
     const unitId = String(context.unitId || '');
     const assignments = (data.assignments || []).map(a => String(a.responderUnitId) === unitId
         ? { ...a, status, timestamps: { ...a.timestamps, [status]: now() } }
@@ -371,7 +321,7 @@ exports.assignUnitToIncident = (0, https_1.onCall)(async (req) => {
     if (!incidentId || !responderUnitId) {
         throw new https_1.HttpsError('invalid-argument', 'incidentId and responderUnitId are required');
     }
-    const { ref, data } = await loadIncidentInTenant(String(incidentId), context);
+    const { ref, data } = await (0, tenantIncidentService_1.loadIncidentInTenant)(String(incidentId), context);
     const unitSnap = await db.doc(`responderUnits/${responderUnitId}`).get();
     if (!unitSnap.exists)
         throw new https_1.HttpsError('not-found', 'Responder unit not found');
@@ -402,28 +352,12 @@ exports.assignUnitToIncident = (0, https_1.onCall)(async (req) => {
 });
 exports.registerPushToken = (0, https_1.onCall)(async (req) => {
     const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
-    const { deviceId, token } = req.data || {};
-    if (!deviceId || !token)
-        throw new https_1.HttpsError('invalid-argument', 'deviceId and token required');
-    const devicePayload = {
-        token: String(token),
-        userId: context.userId,
-        organizationId: context.organizationId,
-        authProvider: context.authProvider,
-        updatedAt: now(),
-    };
-    // Per-user device doc (existing mobile path)
-    await db.doc(`fcmTokens/${actorUid(context)}/devices/${String(deviceId)}`).set(devicePayload, {
-        merge: true,
+    const { deviceId, token, environment } = req.data || {};
+    return (0, tenantIncidentService_1.registerTenantPushToken)(context, {
+        deviceId,
+        token,
+        environment: typeof environment === 'string' ? environment : undefined,
     });
-    // Denormalized org index for reliable tenant-scoped fanout
-    await db
-        .doc(`orgDevices/${context.organizationId}/tokens/${actorUid(context)}_${String(deviceId)}`)
-        .set({
-        ...devicePayload,
-        deviceId: String(deviceId),
-    }, { merge: true });
-    return { ok: true, organizationId: context.organizationId };
 });
 exports.onIncidentCreatedNotify = (0, firestore_1.onDocumentCreated)('incidents/{incidentId}', async (event) => {
     const incident = event.data?.data();

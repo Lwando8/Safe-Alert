@@ -7,9 +7,13 @@
   "main": "lib/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "serve": "npm run build && firebase emulators:start --only functions,firestore,database,auth --config ../firebase.json",
     "deploy": "npm run build && firebase deploy --only functions --config ../firebase.json",
     "seed": "npm run build && node lib/scripts/seed.js",
+    "seed:phase2b": "npm run build && FIRESTORE_EMULATOR_HOST=${FIRESTORE_EMULATOR_HOST:-127.0.0.1:8080} GCLOUD_PROJECT=${GCLOUD_PROJECT:-demo-seren} node lib/scripts/seed-phase2b-tenants.js",
+    "probe:phase2b": "npm run build && FIRESTORE_EMULATOR_HOST=${FIRESTORE_EMULATOR_HOST:-127.0.0.1:8080} GCLOUD_PROJECT=${GCLOUD_PROJECT:-demo-seren} node lib/scripts/phase2b-emulator-probe.js",
     "smoke:phase2b": "npm run build && node lib/scripts/phase2b-smoke.js",
     "smoke:phase2b:checklist": "SMOKE_CHECKLIST_ONLY=1 npm run smoke:phase2b"
   },
@@ -20,6 +24,8 @@
     "svix": "^1.99.1"
   },
   "devDependencies": {
-    "typescript": "^5.9.2"
+    "@types/node": "^26.1.2",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
   }
 }

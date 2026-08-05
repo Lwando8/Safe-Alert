@@ -18,9 +18,14 @@ What we built, why, and what's next.
 
 ### Phase 2B Dual-Auth Bridge (current)
 **👉 [`PHASE2B-DUAL-AUTH-BRIDGE.md`](./PHASE2B-DUAL-AUTH-BRIDGE.md)**  
-Clerk-preferred / Firebase-legacy adapter, removal gate, stop-gate = partially verified.  
+Clerk-preferred / Firebase-legacy adapter, removal gate, stop-gate = tenant-safe but partially verified.  
 ⏱️ 5 minutes read
 
+### Phase 2B verification artifacts
+- [`PHASE2B-IMPLEMENTATION-NOTES.md`](./PHASE2B-IMPLEMENTATION-NOTES.md)
+- [`PHASE2B-TEST-EVIDENCE.md`](./PHASE2B-TEST-EVIDENCE.md)
+- [`PHASE2B-MANUAL-VERIFICATION-CHECKLIST.md`](./PHASE2B-MANUAL-VERIFICATION-CHECKLIST.md)
+- [`PHASE2B-STOP-GATE-REPORT.md`](./PHASE2B-STOP-GATE-REPORT.md)
 ---
 
 ## 📋 PLANNING & ANALYSIS

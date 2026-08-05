@@ -11,6 +11,13 @@ import {
 import { MembershipSyncService } from './services/MembershipSyncService';
 import { IdentityLinkService } from './services/IdentityLinkService';
 import { clerkWebhook } from './http/clerkWebhook';
+import {
+  actorUid,
+  createTenantIncident,
+  listTenantIncidents,
+  loadIncidentInTenant,
+  registerTenantPushToken,
+} from './incidents/tenantIncidentService';
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -18,8 +25,6 @@ const rtdb = admin.database();
 const auth = admin.auth();
 
 export { clerkWebhook };
-
-type IncidentType = 'sos' | 'medical' | 'security';
 
 /** Legacy Firebase-claim helpers — only for unmigrated callables */
 function requireFirebaseAuth(ctx: { auth?: { uid: string; token: Record<string, unknown> } }) {
@@ -41,19 +46,6 @@ function requireFirebaseRole(
 
 function now() {
   return Date.now();
-}
-
-function actorUid(context: RequestContext): string {
-  return context.firebaseUid || context.userId;
-}
-
-async function loadIncidentInTenant(incidentId: string, context: RequestContext) {
-  const ref = db.doc(`incidents/${incidentId}`);
-  const snap = await ref.get();
-  if (!snap.exists) throw new HttpsError('not-found', 'Incident not found');
-  const data = snap.data() as Record<string, unknown>;
-  requireTenantMatch(context, data.organizationId as string | undefined);
-  return { ref, data };
 }
 
 // ---------------------------------------------------------------------------
@@ -185,52 +177,9 @@ export const loginAdmin = onCall(async req => {
 
 export const createIncident = onCall(async req => {
   const context = await resolveRequestContextFromCallable(req);
-  authorize(context, { permission: 'incidents:create' });
-
-  // Never trust client organizationId / providerId as tenant
+  // Never trust client organizationId / providerId / siteId as tenant
   const { type, location, meta } = req.data || {};
-  if (!type || !location?.latitude || !location?.longitude) {
-    throw new HttpsError('invalid-argument', 'type and location are required');
-  }
-  if (!context.siteId) {
-    throw new HttpsError('failed-precondition', 'Membership has no site assignment');
-  }
-
-  const incidentId = db.collection('incidents').doc().id;
-  const incident = {
-    id: incidentId,
-    type: String(type) as IncidentType,
-    status: 'open',
-    mapStatus: 'unassigned',
-    userId: context.userId,
-    organizationId: context.organizationId,
-    siteId: context.siteId,
-    zoneId: null as string | null,
-    providerId: context.organizationId,
-    location,
-    lastLocation: location,
-    createdAt: now(),
-    updatedAt: now(),
-    assignments: [] as unknown[],
-    meta: meta || {},
-  };
-  await db.doc(`incidents/${incidentId}`).set(incident);
-  await db.doc(`incidents/${incidentId}/timeline/${db.collection('_').doc().id}`).set({
-    eventType: 'incident_created',
-    incidentId,
-    userId: context.userId,
-    organizationId: context.organizationId,
-    authProvider: context.authProvider,
-    timestamp: now(),
-  });
-  await rtdb.ref(`incidentTracks/${incidentId}/points`).push({
-    lat: location.latitude,
-    lng: location.longitude,
-    t: now(),
-    uid: actorUid(context),
-    organizationId: context.organizationId,
-  });
-  return incident;
+  return createTenantIncident(context, { type, location, meta });
 });
 
 export const appendIncidentLocation = onCall(async req => {
@@ -263,17 +212,9 @@ export const appendIncidentLocation = onCall(async req => {
 
 export const getNearbyIncidents = onCall(async req => {
   const context = await resolveRequestContextFromCallable(req);
-  authorize(context, { permission: 'incidents:read-all' });
-
   // Ignore any client-supplied organizationId
   const { radiusKm = 25, incidentId } = req.data || {};
-  const list = await db
-    .collection('incidents')
-    .where('organizationId', '==', context.organizationId)
-    .where('status', '==', 'open')
-    .orderBy('createdAt', 'desc')
-    .limit(200)
-    .get();
+  const listed = await listTenantIncidents(context, { status: 'open', limit: 200 });
 
   if (incidentId) {
     const unitSnap = await db
@@ -284,24 +225,34 @@ export const getNearbyIncidents = onCall(async req => {
       .get();
     return {
       radiusKm,
-      organizationId: context.organizationId,
-      authProvider: context.authProvider,
+      organizationId: listed.organizationId,
+      authProvider: listed.authProvider,
       units: unitSnap.docs.map(d => ({
         id: d.id,
         ...d.data(),
         canAssign: true,
         onShift: true,
       })),
-      incidents: list.docs.map(d => d.data()),
+      incidents: listed.incidents,
     };
   }
 
   return {
     radiusKm,
-    organizationId: context.organizationId,
-    authProvider: context.authProvider,
-    incidents: list.docs.map(d => d.data()),
+    organizationId: listed.organizationId,
+    authProvider: listed.authProvider,
+    incidents: listed.incidents,
   };
+});
+
+/** Ops / control-room list — same tenant pipeline as getNearbyIncidents */
+export const listOrgIncidents = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  const { status, limit } = req.data || {};
+  return listTenantIncidents(context, {
+    status: typeof status === 'string' ? status : undefined,
+    limit: typeof limit === 'number' ? limit : 100,
+  });
 });
 
 export const acceptIncident = onCall(async req => {
@@ -412,34 +363,12 @@ export const assignUnitToIncident = onCall(async req => {
 
 export const registerPushToken = onCall(async req => {
   const context = await resolveRequestContextFromCallable(req);
-  const { deviceId, token } = req.data || {};
-  if (!deviceId || !token) throw new HttpsError('invalid-argument', 'deviceId and token required');
-
-  const devicePayload = {
-    token: String(token),
-    userId: context.userId,
-    organizationId: context.organizationId,
-    authProvider: context.authProvider,
-    updatedAt: now(),
-  };
-
-  // Per-user device doc (existing mobile path)
-  await db.doc(`fcmTokens/${actorUid(context)}/devices/${String(deviceId)}`).set(devicePayload, {
-    merge: true,
+  const { deviceId, token, environment } = req.data || {};
+  return registerTenantPushToken(context, {
+    deviceId,
+    token,
+    environment: typeof environment === 'string' ? environment : undefined,
   });
-
-  // Denormalized org index for reliable tenant-scoped fanout
-  await db
-    .doc(`orgDevices/${context.organizationId}/tokens/${actorUid(context)}_${String(deviceId)}`)
-    .set(
-      {
-        ...devicePayload,
-        deviceId: String(deviceId),
-      },
-      { merge: true }
-    );
-
-  return { ok: true, organizationId: context.organizationId };
 });
 
 export const onIncidentCreatedNotify = onDocumentCreated('incidents/{incidentId}', async event => {

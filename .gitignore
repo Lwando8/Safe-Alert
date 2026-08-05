@@ -116,3 +116,7 @@ android/app/google-services.json
 
 # CocoaPods
 /ios/Pods/ 
+# Firebase emulator logs
+*-debug.log
+firebase-debug.log
+firestore-debug.log
