@@ -13,8 +13,9 @@ Local IDE preview / port-forward is **non-blocking**. Focus here.
 | Web Clerk `pk_test` / `sk_test` in `apps/web/.env.local` | Present |
 | Functions Clerk secret + publishable (local `.env`, gitignored) | Synced for agent |
 | `npm run preflight:clerk` | **`keys_ready`** (webhook secret still missing — expected pre-deploy) |
-| Firebase project | **`seren-sos`** (`.firebaserc` set) |
-| Firebase Functions / Cloud Run deploy | **Blocked** — no `firebase login` / `FIREBASE_TOKEN` in this VM |
+| Firebase project | **`seren-sos`** (`.firebaserc` set; CLI logged in as project owner) |
+| Phase 2E client security rules (Firestore/RTDB deny) | Done in repo — deploy with `firebase deploy --only firestore:rules,database` |
+| Firebase Functions / Cloud Run deploy | **Deferred** — needs **Blaze** billing on `seren-sos` |
 | Vercel preview from Expo monorepo root | Skipped via `ignoreCommand`; set Root Directory=`apps/web` in dashboard |
 | Mobile Clerk cutover / remove Firebase fallback | Deferred (removal gate) |
 
@@ -77,10 +78,17 @@ Dashboard (cannot be done from repo alone):
 
 ## 4. Explicitly deferred
 
+- **Blaze billing** + Firebase Functions / Cloud Run deploy + Clerk webhook live sync  
 - Mobile Clerk cutover / `ALLOW_FIREBASE_AUTH_FALLBACK=false`  
 - Second **production** university onboarding  
 - `/platform/organizations` provisioning UI  
-- Client Firestore/RTDB org-scoped rules rewrite  
+- Client Firestore/RTDB org-claim re-open (after Clerk claims verified)  
+- Unmigrated callables (shifts/heartbeat/login*) until Functions can deploy  
+
+## 5. Forging forward without Blaze (current)
+
+1. ~~Phase 2E security rules~~ (this slice)  
+2. Next candidates: platform orgs shell → real read model; ops shell wiring; geo-radius on `getNearbyIncidents`; mobile Clerk prep (code only)  
 
 ## Agent cannot proceed until you provide
 

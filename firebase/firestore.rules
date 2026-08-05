@@ -13,13 +13,13 @@ service cloud.firestore {
       return hasRole('DISPATCHER') || hasRole('SUPER_ADMIN');
     }
 
-    function isResponder() {
-      return hasRole('RESPONDER_UNIT');
-    }
-
-    function isCitizen() {
-      return hasRole('CITIZEN') || request.auth.token.role == null;
-    }
+    // -------------------------------------------------------------------------
+    // Phase 2E posture: tenant-sensitive collections are Admin SDK / callable
+    // only. Client SDK reads by role alone were cross-tenant (any DISPATCHER /
+    // RESPONDER_UNIT could read every org). Ops web uses Admin SDK; migrated
+    // incident/push APIs use Cloud Functions. Do not reopen client reads until
+    // Clerk org claims (or equivalent) are verified end-to-end.
+    // -------------------------------------------------------------------------
 
     match /users/{uid} {
       allow read: if isAuth() && (request.auth.uid == uid || isAdmin());
@@ -36,33 +36,30 @@ service cloud.firestore {
       }
     }
 
+    // Incidents + timeline — callable / Admin only (tenant stamped server-side)
     match /incidents/{incidentId} {
-      allow read: if isAdmin() || isResponder() || (isAuth() && resource.data.userId == request.auth.uid);
-      allow write: if false;
+      allow read, write: if false;
 
       match /timeline/{eventId} {
-        allow read: if isAdmin() || isResponder() || (isAuth() && get(/databases/$(database)/documents/incidents/$(incidentId)).data.userId == request.auth.uid);
-        allow write: if false;
+        allow read, write: if false;
       }
     }
 
     match /responderUnits/{unitId} {
-      allow read: if isAdmin() || isResponder();
-      allow write: if isAdmin();
+      allow read, write: if false;
     }
 
     match /shifts/{shiftId} {
-      allow read: if isAdmin() || isResponder();
-      allow write: if isAdmin() || isResponder();
+      allow read, write: if false;
     }
 
     match /operationalDevices/{deviceId} {
-      allow read, write: if isAdmin();
+      allow read, write: if false;
     }
 
+    // Legacy FCM paths — registration goes through registerPushToken callable
     match /fcmTokens/{uid}/devices/{deviceId} {
-      allow read: if isAuth() && (request.auth.uid == uid || isAdmin());
-      allow write: if isAuth() && request.auth.uid == uid;
+      allow read, write: if false;
     }
 
     // Tenant authority collections — Admin SDK / Cloud Functions only
@@ -83,6 +80,19 @@ service cloud.firestore {
     }
 
     match /orgDevices/{orgId}/tokens/{tokenId} {
+      allow read, write: if false;
+    }
+
+    match /webhookReceipts/{receiptId} {
+      allow read, write: if false;
+    }
+
+    match /admins/{adminId} {
+      allow read, write: if false;
+    }
+
+    // Default deny anything else (zones, responders, audit, …)
+    match /{document=**} {
       allow read, write: if false;
     }
   }

@@ -1,19 +1,21 @@
 {
   "rules": {
-    ".read": "auth != null",
-    ".write": "auth != null",
+    ".read": false,
+    ".write": false,
     "liveUnits": {
       "$unitCode": {
-        ".read": "auth != null && (auth.token.role === 'RESPONDER_UNIT' || auth.token.role === 'DISPATCHER' || auth.token.role === 'SUPER_ADMIN')",
-        ".write": "auth != null && auth.token.role === 'RESPONDER_UNIT'"
+        ".read": false,
+        ".write": false
       }
     },
     "incidentTracks": {
       "$incidentId": {
-        ".read": "auth != null",
+        ".read": false,
+        ".write": false,
         "points": {
           "$pushId": {
-            ".write": "auth != null"
+            ".read": false,
+            ".write": false
           }
         }
       }
