@@ -49,7 +49,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               variables: {
                 colorPrimary: "oklch(0.36 0.07 175)",
                 colorBackground: "oklch(0.995 0.004 200)",
-                colorText: "oklch(0.22 0.02 200)",
                 borderRadius: "0.625rem",
               },
               elements: {
