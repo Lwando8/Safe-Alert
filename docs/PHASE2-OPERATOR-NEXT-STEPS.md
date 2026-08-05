@@ -14,7 +14,7 @@ Local IDE preview / port-forward is **non-blocking**. Focus here.
 | Functions Clerk secret + publishable (local `.env`, gitignored) | Synced for agent |
 | `npm run preflight:clerk` | **`keys_ready`** (webhook secret still missing — expected pre-deploy) |
 | Firebase project | **`seren-sos`** (`.firebaserc` set; CLI logged in as project owner) |
-| Phase 2E client security rules (Firestore/RTDB deny) | Done in repo — deploy with `firebase deploy --only firestore:rules,database` |
+| Phase 2E client security rules (Firestore/RTDB deny) | **Live** on `seren-sos` `(default)` in **africa-south1**; RTDB deny rules live |
 | Firebase Functions / Cloud Run deploy | **Deployed** to `seren-sos` (us-central1) |
 | Vercel preview from Expo monorepo root | Skipped via `ignoreCommand`; set Root Directory=`apps/web` in dashboard |
 | Mobile Clerk cutover / remove Firebase fallback | Deferred (removal gate) |
