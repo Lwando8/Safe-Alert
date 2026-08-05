@@ -22,7 +22,10 @@
     "server": "echo \"Local Node server is deprecated; use Firebase emulators\"",
     "firebase:emulators": "firebase emulators:start --config firebase/firebase.json",
     "firebase:functions:build": "npm --prefix firebase/functions run build",
-    "firebase:functions:serve": "npm --prefix firebase/functions run serve"
+    "firebase:functions:serve": "npm --prefix firebase/functions run serve",
+    "firebase": "firebase",
+    "firebase:login": "firebase login --no-localhost",
+    "firebase:deploy:functions": "npm --prefix firebase/functions run deploy -- --project seren-sos"
   },
   "dependencies": {
     "@clerk/expo": "^4.2.1",

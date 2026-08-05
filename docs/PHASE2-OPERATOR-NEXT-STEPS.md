@@ -85,5 +85,18 @@ Dashboard (cannot be done from repo alone):
 ## Agent cannot proceed until you provide
 
 1. ~~Firebase project id~~ → **`seren-sos`** recorded in `firebase/.firebaserc`  
-2. **Auth** — `firebase login` on your machine, or set **`FIREBASE_TOKEN`** (from `firebase login:ci`) in the agent/CI env  
-3. After deploy: **`CLERK_WEBHOOK_SECRET`**
+2. ~~Auth~~ → Firebase CLI logged in (use `./node_modules/.bin/firebase`, not bare `firebase`)  
+3. **Billing** — upgrade **`seren-sos`** to the **Blaze (pay-as-you-go)** plan and link a billing account:  
+   https://console.firebase.google.com/project/seren-sos/usage/details  
+   Required APIs that need billing: Cloud Build, Artifact Registry, Cloud Run, Secret Manager  
+4. After deploy: **`CLERK_WEBHOOK_SECRET`**
+
+### CLI reminder (this repo)
+
+```bash
+./node_modules/.bin/firebase --version
+# or
+npx firebase --version
+npm run firebase:login          # --no-localhost flow
+npm run firebase:deploy:functions
+```
