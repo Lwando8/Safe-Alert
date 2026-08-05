@@ -1,6 +1,35 @@
+## Product direction (Phase 1)
+
+**Seren SOS for Universities** — campus safety and university security response.
+See `docs/UNIVERSITY-VERTICAL-INVENTORY.md`, `docs/DOMAIN-MODEL.md`, and
+`docs/IMPLEMENTATION-ROADMAP.md`.
+
+New workspaces:
+
+- `packages/domain` — generic Organization / Site / Zone / Membership types
+- `apps/web` — Next.js university ops + Seren platform shells (shadcn/ui)
+
+```bash
+npm run web:dashboard   # Next.js dashboards
+npm run domain:build    # Shared domain types
+npm start               # Expo mobile app (unchanged)
+```
+
+## Backend status
+
+Safe Alert now runs on Firebase-first architecture:
+
+- Firebase Auth (role claims)
+- Firestore (incidents, users, units, shifts, timeline)
+- Realtime Database (live unit + incident tracks)
+- Cloud Functions (dispatch logic)
+- FCM (push pipeline)
+
+The legacy `server/` Node backend is retained for reference only and is deprecated for active development.
+
 # Safe Alert - Emergency SOS App
 
-🚨 A comprehensive emergency response mobile application built with React Native and Expo, designed to provide quick access to emergency services and keep users safe.
+A comprehensive emergency response mobile application built with React Native and Expo. The first deployable vertical is university campus safety; broad public emergency-network positioning is deferred.
 
 ## Features
 
