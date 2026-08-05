@@ -1,7 +1,8 @@
 import * as admin from 'firebase-admin';
 import { Clerk } from '@clerk/clerk-sdk-node';
 
-const clerk = Clerk({ secretKey: process.env.CLERK_SECRET_KEY });
+// Clerk SDK typings lag runtime org membership APIs used here.
+const clerk = Clerk({ secretKey: process.env.CLERK_SECRET_KEY }) as any;
 const db = admin.firestore();
 
 /**
@@ -79,10 +80,12 @@ export class MembershipSyncService {
       .limit(1)
       .get();
     
+    const orgSlug = String(organization.slug || organization.id);
+    
     const membershipData: Partial<Membership> = {
       clerkMembershipId,
       clerkOrganizationId: organization.id,
-      organizationId: organization.slug,
+      organizationId: orgSlug,
       userId: publicUserData.userId,
       kind,
       status: 'active',
@@ -98,9 +101,9 @@ export class MembershipSyncService {
       membershipData.createdAt = Date.now();
       
       // Set default site (first site of organization)
-      const siteId = await this.getDefaultSiteId(organization.slug);
+      const siteId = await this.getDefaultSiteId(orgSlug);
       if (!siteId) {
-        console.warn('No default site found for org:', organization.slug);
+        console.warn('No default site found for org:', orgSlug);
         throw new Error('Organization must have at least one site configured');
       }
       membershipData.siteId = siteId;
@@ -239,19 +242,72 @@ export class MembershipSyncService {
   }
   
   /**
+   * Ensure organization + default site exist (for webhook organization.created / bootstrap).
+   */
+  static async ensureOrganizationAndDefaultSite(params: {
+    clerkOrganizationId: string;
+    organizationId: string;
+    name: string;
+  }): Promise<string> {
+    const { clerkOrganizationId, organizationId, name } = params;
+    const now = Date.now();
+
+    await db.doc(`organizations/${organizationId}`).set(
+      {
+        id: organizationId,
+        clerkOrganizationId,
+        name,
+        slug: organizationId,
+        status: 'active',
+        updatedAt: now,
+        createdAt: now,
+      },
+      { merge: true }
+    );
+
+    const existingSite = await this.getDefaultSiteId(organizationId);
+    if (existingSite) return existingSite;
+
+    const siteRef = db.collection('sites').doc();
+    await siteRef.set({
+      id: siteRef.id,
+      organizationId,
+      name: `${name} Main Campus`,
+      slug: 'main',
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    });
+    return siteRef.id;
+  }
+
+  /**
    * Bulk sync all members of an organization
    */
-  static async syncOrganizationMembers(clerkOrganizationId: string): Promise<void> {
+  static async syncOrganizationMembers(clerkOrganizationId: string): Promise<number> {
     console.log('Syncing all members for org:', clerkOrganizationId);
-    
-    // Get all memberships from Clerk
-    const memberships = await clerk.organizations.getOrganizationMembershipList({
+
+    const organization = await clerk.organizations.getOrganization({
+      organizationId: clerkOrganizationId,
+    });
+
+    const organizationId = String(organization.slug || organization.id);
+    await this.ensureOrganizationAndDefaultSite({
+      clerkOrganizationId,
+      organizationId,
+      name: organization.name || organizationId,
+    });
+
+    const membershipsResult = await clerk.organizations.getOrganizationMembershipList({
       organizationId: clerkOrganizationId,
       limit: 500,
     });
-    
+    const membershipList = Array.isArray(membershipsResult)
+      ? membershipsResult
+      : membershipsResult?.data || [];
+
     let syncCount = 0;
-    for (const membership of memberships.data) {
+    for (const membership of membershipList) {
       try {
         await this.syncMembership(membership.id);
         syncCount++;
@@ -259,7 +315,8 @@ export class MembershipSyncService {
         console.error('Failed to sync membership:', membership.id, err);
       }
     }
-    
+
     console.log(`Synced ${syncCount} memberships for org`);
+    return syncCount;
   }
 }

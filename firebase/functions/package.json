@@ -9,7 +9,9 @@
     "build": "tsc -p tsconfig.json",
     "serve": "npm run build && firebase emulators:start --only functions,firestore,database,auth --config ../firebase.json",
     "deploy": "npm run build && firebase deploy --only functions --config ../firebase.json",
-    "seed": "npm run build && node lib/scripts/seed.js"
+    "seed": "npm run build && node lib/scripts/seed.js",
+    "smoke:phase2b": "npm run build && node lib/scripts/phase2b-smoke.js",
+    "smoke:phase2b:checklist": "SMOKE_CHECKLIST_ONLY=1 npm run smoke:phase2b"
   },
   "dependencies": {
     "@clerk/clerk-sdk-node": "^4.13.23",

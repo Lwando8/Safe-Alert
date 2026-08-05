@@ -16,6 +16,11 @@ Complete step-by-step guide to set up Clerk and test the web app.
 What we built, why, and what's next.  
 ⏱️ 5-10 minutes read
 
+### Phase 2B Dual-Auth Bridge (current)
+**👉 [`PHASE2B-DUAL-AUTH-BRIDGE.md`](./PHASE2B-DUAL-AUTH-BRIDGE.md)**  
+Clerk-preferred / Firebase-legacy adapter, removal gate, stop-gate = partially verified.  
+⏱️ 5 minutes read
+
 ---
 
 ## 📋 PLANNING & ANALYSIS

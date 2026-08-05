@@ -64,5 +64,26 @@ service cloud.firestore {
       allow read: if isAuth() && (request.auth.uid == uid || isAdmin());
       allow write: if isAuth() && request.auth.uid == uid;
     }
+
+    // Tenant authority collections — Admin SDK / Cloud Functions only
+    match /memberships/{membershipId} {
+      allow read, write: if false;
+    }
+
+    match /identityLinks/{linkId} {
+      allow read, write: if false;
+    }
+
+    match /organizations/{orgId} {
+      allow read, write: if false;
+    }
+
+    match /sites/{siteId} {
+      allow read, write: if false;
+    }
+
+    match /orgDevices/{orgId}/tokens/{tokenId} {
+      allow read, write: if false;
+    }
   }
 }
