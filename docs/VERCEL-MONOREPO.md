@@ -2,17 +2,18 @@
 
 The Git-connected Vercel project currently has **Root Directory = unset** while this
 repo is a monorepo (Expo at repo root, Next.js at `apps/web`). That caused preview
-deploys to fail even when `apps/web` builds locally.
+deploys to **fail instantly** (framework validation never finds `next` at the Expo
+root), even when `apps/web` builds locally.
 
 ## Repo workaround (in place)
 
-Root [`vercel.json`](../vercel.json) forces:
-
-- `framework: nextjs`
-- build `@seren/domain` + `@seren/web`
-- copy `apps/web/.next` (and `public`) to the repo root so the Next builder can find output
-
-Root [`next.config.ts`](../next.config.ts) re-exports `apps/web/next.config`.
+1. Root [`package.json`](../package.json) lists `next` so Vercel’s Next.js preset can
+   validate the project at the monorepo root.
+2. Root [`vercel.json`](../vercel.json) builds `@seren/domain` + `@seren/web` with
+   `SEREN_VERCEL_ROOT_STAGING=1`, which writes `.next` to the repo root via
+   [`apps/web/next.config.ts`](../apps/web/next.config.ts) `distDir`, and copies
+   `apps/web/public` to root `public`.
+3. Root [`next.config.ts`](../next.config.ts) re-exports the web app config.
 
 ## Preferred permanent fix (dashboard)
 
@@ -27,4 +28,6 @@ In Vercel → Project → Settings → Build & Deployment:
    - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
    - `CLERK_SECRET_KEY`
 
-After Root Directory is set to `apps/web`, the root `.next` copy workaround can be removed.
+After Root Directory is set to `apps/web`, remove the root `next` dependency, root
+`next.config.ts`, root staging `buildCommand`, and `SEREN_VERCEL_ROOT_STAGING` /
+`distDir` override.

@@ -2,5 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "npm install",
-  "buildCommand": "npm run domain:build && npm run build --workspace=@seren/web && rm -rf .next && cp -a apps/web/.next .next && rm -rf public && cp -a apps/web/public public"
+  "buildCommand": "npm run domain:build && SEREN_VERCEL_ROOT_STAGING=1 npm run build --workspace=@seren/web && rm -rf public && cp -a apps/web/public public"
 }
