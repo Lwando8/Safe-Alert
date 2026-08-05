@@ -3,6 +3,8 @@ import { DM_Sans, Fraunces, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { RootAuthHeader } from "@/components/root-auth-header";
+import { isClerkConfigured } from "@/lib/auth-guards";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -26,20 +28,10 @@ export const metadata: Metadata = {
     "University operations control room and Seren platform super-admin foundation.",
 };
 
-function clerkConfigured(): boolean {
-  const pk = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
-  const sk = process.env.CLERK_SECRET_KEY ?? "";
-  return (
-    pk.startsWith("pk_") &&
-    sk.startsWith("sk_") &&
-    !pk.includes("your_key") &&
-    !sk.includes("your_key")
-  );
-}
-
 export default function RootLayout({ children }: LayoutProps<"/">) {
   const content = (
     <TooltipProvider>
+      <RootAuthHeader />
       {children}
       <Toaster />
     </TooltipProvider>
@@ -51,7 +43,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${dmSans.variable} ${fraunces.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col font-sans">
-        {clerkConfigured() ? (
+        {isClerkConfigured() ? (
           <ClerkProvider
             appearance={{
               variables: {

@@ -8,7 +8,7 @@
 ### Route guards
 
 - Shared policy in [`apps/web/src/lib/auth-guards.ts`](../apps/web/src/lib/auth-guards.ts)
-- [`apps/web/src/middleware.ts`](../apps/web/src/middleware.ts) uses `resolveProtectedRouteRedirect`
+- [`apps/web/src/proxy.ts`](../apps/web/src/proxy.ts) (Next.js 16 Clerk entry) uses `resolveProtectedRouteRedirect`
 - Platform soft-guard: [`apps/web/src/components/platform-admin-gate.tsx`](../apps/web/src/components/platform-admin-gate.tsx)
 - `/platform/organizations` remains a **shell** (no provisioning)
 

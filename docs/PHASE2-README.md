@@ -143,7 +143,7 @@ app/
 components/
 └── shell-nav.tsx                  # OrganizationSwitcher & UserButton
 
-middleware.ts                       # Route protection
+middleware/proxy.ts                  # Route protection (Next 16: proxy.ts)
 ```
 
 **Firebase Functions** (`firebase/functions/src/`):

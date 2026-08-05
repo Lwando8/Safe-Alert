@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { HomeAuthCtas } from "@/components/home-auth-ctas";
 
 export default function HomePage() {
   return (
@@ -12,10 +13,12 @@ export default function HomePage() {
           Campus safety dashboards
         </h1>
         <p className="max-w-xl text-base leading-relaxed text-muted-foreground">
-          Phase 1 foundation shells. University operations and the Seren platform
-          console are separate surfaces — pick a destination to continue.
+          University operations and the Seren platform console are separate
+          surfaces. Sign in with Clerk to continue, or open a destination below.
         </p>
       </div>
+
+      <HomeAuthCtas />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <Button render={<Link href="/ops" />}>University operations</Button>

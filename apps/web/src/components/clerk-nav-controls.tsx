@@ -1,21 +1,28 @@
-"use client";
+'use client';
 
-import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
-import { cn } from "@/lib/utils";
+import {
+  OrganizationSwitcher,
+  Show,
+  SignInButton,
+  SignUpButton,
+  UserButton,
+} from '@clerk/nextjs';
+import { cn } from '@/lib/utils';
+import { isClerkPublishableConfigured } from '@/lib/auth-guards';
+import { Button } from '@/components/ui/button';
 
 type ClerkNavControlsProps = {
-  variant?: "university" | "platform";
+  variant?: 'university' | 'platform';
 };
 
-function clerkPublishableKeyConfigured(): boolean {
-  const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
-  return key.startsWith("pk_") && !key.includes("your_key");
-}
-
+/**
+ * Ops/platform shell auth controls.
+ * Uses <Show> (not deprecated SignedIn/SignedOut).
+ */
 export function ClerkNavControls({
-  variant = "university",
+  variant = 'university',
 }: ClerkNavControlsProps) {
-  if (!clerkPublishableKeyConfigured()) {
+  if (!isClerkPublishableConfigured()) {
     return (
       <p className="text-xs text-muted-foreground">
         Clerk keys not configured — auth UI disabled
@@ -24,30 +31,48 @@ export function ClerkNavControls({
   }
 
   return (
-    <div className="mb-3 flex items-center justify-between gap-2">
-      <OrganizationSwitcher
-        hidePersonal={variant === "university"}
-        afterSelectOrganizationUrl="/ops"
-        afterCreateOrganizationUrl="/ops"
-        appearance={{
-          elements: {
-            rootBox: "flex-1",
-            organizationSwitcherTrigger: cn(
-              "border rounded-md px-3 py-2 text-sm w-full justify-start",
-              variant === "platform"
-                ? "border-white/20 hover:bg-white/10"
-                : "border-border hover:bg-accent",
-            ),
-          },
-        }}
-      />
-      <UserButton
-        appearance={{
-          elements: {
-            userButtonBox: "scale-110",
-          },
-        }}
-      />
+    <div className="mb-3 flex flex-col gap-2">
+      <Show when="signed-out">
+        <div className="flex gap-2">
+          <SignInButton mode="modal">
+            <Button type="button" size="sm" className="flex-1">
+              Sign in
+            </Button>
+          </SignInButton>
+          <SignUpButton mode="modal">
+            <Button type="button" size="sm" variant="outline" className="flex-1">
+              Sign up
+            </Button>
+          </SignUpButton>
+        </div>
+      </Show>
+      <Show when="signed-in">
+        <div className="flex items-center justify-between gap-2">
+          <OrganizationSwitcher
+            hidePersonal={variant === 'university'}
+            afterSelectOrganizationUrl="/ops"
+            afterCreateOrganizationUrl="/ops"
+            appearance={{
+              elements: {
+                rootBox: 'flex-1',
+                organizationSwitcherTrigger: cn(
+                  'border rounded-md px-3 py-2 text-sm w-full justify-start',
+                  variant === 'platform'
+                    ? 'border-white/20 hover:bg-white/10'
+                    : 'border-border hover:bg-accent',
+                ),
+              },
+            }}
+          />
+          <UserButton
+            appearance={{
+              elements: {
+                userButtonBox: 'scale-110',
+              },
+            }}
+          />
+        </div>
+      </Show>
     </div>
   );
 }
