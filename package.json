@@ -17,6 +17,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "web:dashboard": "npm run dev --workspace=@seren/web",
+    "build": "npm run build --workspace=@seren/web",
     "domain:build": "npm run build --workspace=@seren/domain",
     "server": "echo \"Local Node server is deprecated; use Firebase emulators\"",
     "firebase:emulators": "firebase emulators:start --config firebase/firebase.json",

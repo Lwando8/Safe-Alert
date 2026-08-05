@@ -1,7 +1,9 @@
 # PHASE 2 — MEMBERSHIP SYSTEM IMPLEMENTATION PROGRESS
 
 **Date Started**: 2026-08-05  
-**Status**: IN PROGRESS — Web App Foundation Complete
+**Status**: IN PROGRESS — Phase 2C ops/platform hardening + Phase 2D isolation tests landed; Clerk live path still **externally blocked**
+
+**Phase 2B/2C/2D stop-gate**: **tenant-safe but partially verified** — migrated APIs + `/ops/incidents` + ops tenant boundary; automated write-path probes 10/10; Clerk live path blocked without keys; Firebase fallback still required for mobile. See [PHASE2B-STOP-GATE-REPORT.md](./PHASE2B-STOP-GATE-REPORT.md), [PHASE2C-OPS-PLATFORM-HARDENING.md](./PHASE2C-OPS-PLATFORM-HARDENING.md), [PHASE2D-ISOLATION-TESTS.md](./PHASE2D-ISOLATION-TESTS.md).
 
 ---
 
@@ -26,6 +28,7 @@
   - `apps/web/.env.local.example` (Next.js)
   - `.env.example` (Expo mobile)
   - `firebase/functions/.env.example` (Functions)
+  - [x] `ALLOW_FIREBASE_AUTH_FALLBACK` + `MEMBERSHIP_BOOTSTRAP_SECRET` documented
 
 ### 4. Web App Authentication (Next.js)
 - [x] ClerkProvider added to root layout
@@ -49,10 +52,12 @@
 
 ### 6. Firebase Functions Middleware
 - [x] Clerk auth middleware created (`buildRequestContext`)
-- [x] Authorization helper created (`authorize`)
-- [x] Request context type defined
+- [x] Dual-auth `resolveRequestContext` (Clerk-first + Firebase legacy adapter) ✅ Phase 2B
+- [x] Authorization helper created (`authorize` / `authorizeAnyPermission` / `requireTenantMatch`)
+- [x] Request context includes `authProvider`
 - [x] Token verification implemented
 - [x] Membership validation from Firestore
+- [x] `identityLinks` fail-closed resolver ✅ Phase 2B
 
 ### 7. Membership Sync Service
 - [x] MembershipSyncService created
@@ -61,6 +66,7 @@
 - [x] Sync membership function
 - [x] Revoke membership function
 - [x] Bulk sync organization members
+- [x] `ensureOrganizationAndDefaultSite` ✅ Phase 2B
 
 ### 8. Setup Documentation
 - [x] Comprehensive Clerk setup guide created
@@ -69,7 +75,65 @@
 - [x] Environment variable configuration
 - [x] Test organization creation guide
 - [x] Troubleshooting section
+- [x] Dual-auth bridge + removal gate documented (`PHASE2B-DUAL-AUTH-BRIDGE.md`) ✅
 
+---
+
+## ✅ PHASE 2B COMPLETE (code)
+
+### 12. Firebase Functions Migration (tenant surface)
+- [x] Create Clerk auth middleware (`buildRequestContext`) ✅
+- [x] Create authorization helper (`authorize`) ✅
+- [x] Dual-auth bridge with `ALLOW_FIREBASE_AUTH_FALLBACK` ✅
+- [x] Migrate `createIncident` function ✅
+- [x] Migrate `getNearbyIncidents` function ✅
+- [x] Migrate `appendIncidentLocation` / `acceptIncident` / `updateIncidentStatus` / `assignUnitToIncident` ✅
+- [x] Migrate `registerPushToken` + org-scoped `onIncidentCreatedNotify` ✅
+- [ ] Migrate remaining unmigrated callables (shifts/heartbeat/login*) — deferred
+- [ ] Remove Firebase Auth dependencies — blocked on removal gate
+- [ ] Deploy and test functions — operator step
+
+### 13. Webhook Handler
+- [x] MembershipSyncService created ✅
+- [x] Create webhook endpoint function (`clerkWebhook`) ✅
+- [x] Bootstrap callable (`bootstrapOrganizationMemberships`) ✅
+- [x] Identity link callable (`linkIdentity`, Clerk/platform only) ✅
+- [x] Idempotent webhook receipts + org.updated + automated webhook tests ✅
+- [ ] Deploy webhook function — operator step
+- [ ] Configure Clerk webhooks in Dashboard — operator step
+- [ ] Live Clerk webhook delivery — externally blocked without secrets
+
+### 14. Data Layer Tenant Scoping (incidents + push)
+- [x] Add `organizationId` + `siteId` on incident create ✅
+- [x] Composite indexes for org-scoped incident queries ✅
+- [x] Update incident queries with org filter ✅
+- [x] Add `organizationId` to FCM / `orgDevices` token index ✅
+- [x] Update notification trigger with org filter ✅
+- [x] `listOrgIncidents` + `/ops/incidents` wired to tenant backend ✅
+- [ ] Backfill existing data (if any) — operator step
+
+### 15. Testing & Verification (2B verification slice)
+- [x] Smoke script + verification matrix (`scripts/phase2b-smoke.ts`) ✅
+- [x] Local policy assertions (cross-tenant deny) ✅
+- [x] Vitest isolation + webhook suite ✅
+- [x] Emulator University A/B fixtures (`seed-phase2b-tenants`) ✅
+- [x] Emulator cross-tenant probe (`probe:phase2b`, 8/8) ✅
+- [x] Clerk preflight script (`preflight:clerk`) — reports externally_blocked without keys ✅
+- [ ] Live Clerk organization probes — externally blocked (no keys in agent env)
+- [ ] Physical-device iOS/Android — removal gate
+
+### 16. Phase 2C — Ops / platform hardening
+- [x] Centralize auth guards (`auth-guards.ts`) + middleware ✅
+- [x] Platform soft-guard (`PlatformAdminGate`) ✅
+- [x] Ops tenant boundary remount on org-switch/sign-out ✅
+- [x] Keep `/platform/organizations` as shell ✅
+- [x] Docs: `PHASE2C-OPS-PLATFORM-HARDENING.md` ✅
+
+### 17. Phase 2D — Deeper isolation tests
+- [x] Vitest write-path suite (`incidentWrites.test.ts`) ✅
+- [x] Emulator probe `probe:phase2d` (10/10) ✅
+- [x] CI workflow `.github/workflows/phase2-functions.yml` ✅
+- [x] Docs: `PHASE2D-ISOLATION-TESTS.md` ✅
 ---
 
 ## 🚧 IN PROGRESS
@@ -81,7 +145,7 @@
 
 ---
 
-## 📋 REMAINING WORK
+## 📋 REMAINING WORK (post-2D)
 
 ### 10. Clerk Application Setup (Next Step)
 - [ ] Create Clerk application via CLI
@@ -91,6 +155,7 @@
 - [ ] Pull environment variables to `.env.local`
 - [ ] Create test organizations (University A & B)
 - [ ] Create test users with memberships
+- [ ] Run `npm run preflight:clerk` → ready, then live checklist
 
 ### 11. Mobile App Integration (Estimated: 1-2 days)
 - [ ] Update `App.tsx` with ClerkProvider
@@ -100,43 +165,9 @@
 - [ ] Replace Firebase Auth calls with Clerk
 - [ ] Test authentication flow
 - [ ] Test organization selection
+- [ ] **Then** execute Firebase fallback removal gate
 
-### 12. Firebase Functions Migration (Estimated: 2-3 days)
-- [x] Create Clerk auth middleware (`buildRequestContext`) ✅
-- [x] Create authorization helper (`authorize`) ✅
-- [ ] Migrate `createIncident` function
-- [ ] Migrate `getNearbyIncidents` function
-- [ ] Migrate all remaining functions
-- [ ] Remove Firebase Auth dependencies
-- [ ] Deploy and test functions
-
-### 13. Webhook Handler (Estimated: 1 day)
-- [x] MembershipSyncService created ✅
-- [ ] Create webhook endpoint function
-- [ ] Deploy webhook function
-- [ ] Configure Clerk webhooks in Dashboard
-- [ ] Test membership sync
-- [ ] Test webhook delivery
-
-### 14. Data Layer Tenant Scoping (Estimated: 2-3 days)
-- [ ] Add `organizationId` to incidents collection
-- [ ] Add `siteId` and `zoneId` to incidents
-- [ ] Create composite indexes
-- [ ] Update incident queries with org filter
-- [ ] Add `organizationId` to FCM tokens
-- [ ] Update notification trigger with org filter
-- [ ] Backfill existing data (if any)
-
-### 15. Testing & Verification (Estimated: 2-3 days)
-- [ ] Create two test organizations (University A, University B)
-- [ ] Create test users with memberships
-- [ ] Write cross-tenant isolation tests
-- [ ] Test notification scoping
-- [ ] Test permission enforcement
-- [ ] Performance testing
-- [ ] Security audit
-
-### 16. Documentation & Handoff (Estimated: 1 day)
+### 18. Documentation & Handoff (Estimated: 1 day)
 - [ ] Update API documentation
 - [ ] Create setup guide for new developers
 - [ ] Document membership lifecycle
@@ -212,25 +243,36 @@ Copy the generated keys to:
 - [ ] Authentication migration
 - [ ] Testing
 
-### Firebase Functions ⚠️ (0% Complete)
-- [ ] Clerk token verification
-- [ ] Request context builder
-- [ ] Function migration
-- [ ] Webhook handler
-- [ ] Testing
+### Firebase Functions ✅ (Phase 2B surface complete)
+- [x] Clerk token verification
+- [x] Dual-auth `resolveRequestContext` + Firebase legacy adapter
+- [x] Migrated incident + push callables
+- [x] Webhook handler (`clerkWebhook`) + bootstrap
+- [ ] Live deploy / operator probes
+- [ ] Remove Firebase fallback (removal gate)
 
-### Data Layer ⚠️ (0% Complete)
-- [ ] Membership collection
-- [ ] Organization ID on incidents
-- [ ] Query filtering
-- [ ] Notification scoping
-- [ ] Testing
+### Data Layer ✅ (Phase 2B incidents + push)
+- [x] Membership collection schema + Admin-only rules
+- [x] Organization ID on incidents
+- [x] Query filtering by organizationId
+- [x] Notification scoping via `orgDevices`
+- [ ] Live backfill / production verification
 
-**Overall Progress**: ~35% Complete
+**Overall Progress**: ~55% Complete (Phase 2B code complete; stop-gate: partially verified)
 
 ---
 
 ## 🔧 DEVELOPMENT COMMANDS
+
+```bash
+# Functions
+cd firebase/functions
+npm run build
+npm run smoke:phase2b
+npm run smoke:phase2b:checklist
+```
+
+See also: [`PHASE2B-DUAL-AUTH-BRIDGE.md`](./PHASE2B-DUAL-AUTH-BRIDGE.md)
 
 ### Start Web Development Server
 ```bash

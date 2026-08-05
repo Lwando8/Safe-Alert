@@ -1,4 +1,5 @@
 import { ShellNav } from "@/components/shell-nav";
+import { OpsTenantBoundary } from "@/components/ops-tenant-boundary";
 
 const navItems = [
   { href: "/ops", label: "Command overview" },
@@ -22,9 +23,11 @@ export default function UniversityLayout({
         brandHref="/ops"
         items={navItems}
         showOrgSwitcher
-        footer="Organization-scoped control room · Phase 2 active"
+        footer="Organization-scoped control room · Phase 2C tenant boundary"
       />
-      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <OpsTenantBoundary>{children}</OpsTenantBoundary>
+      </div>
     </div>
   );
 }

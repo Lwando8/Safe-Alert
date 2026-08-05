@@ -5,7 +5,8 @@ export default function OrganizationsPlaceholderPage() {
         Organizations
       </h1>
       <p className="text-sm text-muted-foreground">
-        Tenant provisioning UI — Phase 6. Internal model: Organization.
+        Tenant provisioning UI — intentionally deferred (Phase 6). Phase 2C keeps
+        this page as a shell; no production university onboarding controls here.
       </p>
     </main>
   );

@@ -33,11 +33,11 @@ export default function UnauthorizedPage() {
         </p>
         
         <div className="mt-6 space-y-3">
-          <Button asChild className="w-full">
-            <Link href="/ops">Go to Dashboard</Link>
+          <Button render={<Link href="/ops" />} className="w-full">
+            Go to Dashboard
           </Button>
-          <Button asChild variant="outline" className="w-full">
-            <Link href="/">Go to Home</Link>
+          <Button render={<Link href="/" />} variant="outline" className="w-full">
+            Go to Home
           </Button>
         </div>
       </Card>

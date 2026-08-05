@@ -1,0 +1,4 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "echo \"Skipping Vercel Git deploy at monorepo root (Expo). Set Project Root Directory to apps/web for Next.js previews.\" && exit 0"
+}

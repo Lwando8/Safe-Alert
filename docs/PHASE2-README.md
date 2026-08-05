@@ -16,6 +16,21 @@ Complete step-by-step guide to set up Clerk and test the web app.
 What we built, why, and what's next.  
 ⏱️ 5-10 minutes read
 
+### Phase 2B Dual-Auth Bridge (current)
+**👉 [`PHASE2B-DUAL-AUTH-BRIDGE.md`](./PHASE2B-DUAL-AUTH-BRIDGE.md)**  
+Clerk-preferred / Firebase-legacy adapter, removal gate, stop-gate = tenant-safe but partially verified.  
+⏱️ 5 minutes read
+
+### Phase 2B verification artifacts
+- [`PHASE2B-IMPLEMENTATION-NOTES.md`](./PHASE2B-IMPLEMENTATION-NOTES.md)
+- [`PHASE2B-TEST-EVIDENCE.md`](./PHASE2B-TEST-EVIDENCE.md)
+- [`PHASE2B-MANUAL-VERIFICATION-CHECKLIST.md`](./PHASE2B-MANUAL-VERIFICATION-CHECKLIST.md)
+- [`PHASE2B-KNOWN-LIMITATIONS.md`](./PHASE2B-KNOWN-LIMITATIONS.md)
+- [`PHASE2B-STOP-GATE-REPORT.md`](./PHASE2B-STOP-GATE-REPORT.md)
+
+### Phase 2C / 2D
+- [`PHASE2C-OPS-PLATFORM-HARDENING.md`](./PHASE2C-OPS-PLATFORM-HARDENING.md)
+- [`PHASE2D-ISOLATION-TESTS.md`](./PHASE2D-ISOLATION-TESTS.md)
 ---
 
 ## 📋 PLANNING & ANALYSIS
@@ -128,7 +143,7 @@ app/
 components/
 └── shell-nav.tsx                  # OrganizationSwitcher & UserButton
 
-middleware.ts                       # Route protection
+middleware/proxy.ts                  # Route protection (Next 16: proxy.ts)
 ```
 
 **Firebase Functions** (`firebase/functions/src/`):

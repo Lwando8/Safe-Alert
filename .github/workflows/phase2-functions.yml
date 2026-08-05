@@ -1,0 +1,30 @@
+name: Phase 2 Functions
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'cursor/**']
+    paths:
+      - 'firebase/functions/**'
+      - 'apps/web/src/lib/auth-guards.ts'
+      - '.github/workflows/phase2-functions.yml'
+
+jobs:
+  unit:
+    name: functions unit + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: firebase/functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: firebase/functions/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+    # Clerk secrets are not required. Emulator probe remains a manual/local evidence step
+    # (see docs/PHASE2D-ISOLATION-TESTS.md).
