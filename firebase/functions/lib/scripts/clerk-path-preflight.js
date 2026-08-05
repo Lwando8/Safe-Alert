@@ -1,16 +1,77 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
 /**
  * Clerk path preflight — checks env readiness without claiming verification.
  *
+ * Loads `firebase/functions/.env` and `apps/web/.env.local` when present.
+ *
  * Usage:
- *   npx ts-node scripts/clerk-path-preflight.ts
- *   # or after build:
- *   node lib/scripts/clerk-path-preflight.js
+ *   npm run preflight:clerk
  *
  * Exit codes:
- *   0 = ready (keys look configured; still requires live checklist)
- *   2 = externally blocked (missing/placeholder keys)
+ *   0 = ready (pk/sk + webhook signing secret — live checklist eligible)
+ *   1 = keys_ready (pk/sk present; deploy functions, then add whsec_ and re-run)
+ *   2 = externally_blocked (missing/placeholder Clerk pk/sk)
  */
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
+function loadEnvFile(filePath) {
+    if (!fs.existsSync(filePath))
+        return;
+    const text = fs.readFileSync(filePath, 'utf8');
+    for (const raw of text.split(/\n/)) {
+        const ln = raw.trim();
+        if (!ln || ln.startsWith('#') || !ln.includes('='))
+            continue;
+        const i = ln.indexOf('=');
+        const key = ln.slice(0, i).trim();
+        let value = ln.slice(i + 1).trim();
+        if ((value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'"))) {
+            value = value.slice(1, -1);
+        }
+        if (process.env[key] === undefined)
+            process.env[key] = value;
+    }
+}
+// scripts compile to lib/scripts/ → repo-relative paths
+const functionsRoot = path.resolve(__dirname, '../..');
+const repoRoot = path.resolve(functionsRoot, '../..');
+loadEnvFile(path.join(functionsRoot, '.env'));
+loadEnvFile(path.join(repoRoot, 'apps/web/.env.local'));
 function isRealKey(value, prefixes, placeholderNeedle) {
     if (!value)
         return false;
@@ -34,6 +95,7 @@ function runClerkPreflight() {
                 ? 'CLERK_SECRET_KEY present'
                 : 'CLERK_SECRET_KEY looks like a placeholder'
             : 'CLERK_SECRET_KEY missing',
+        requiredFor: 'keys',
     });
     checks.push({
         id: 'functions_or_web_publishable',
@@ -43,6 +105,15 @@ function runClerkPreflight() {
                 ? 'Publishable key present'
                 : 'Publishable key looks like a placeholder'
             : 'CLERK_PUBLISHABLE_KEY / NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY missing',
+        requiredFor: 'keys',
+    });
+    checks.push({
+        id: 'web_pair',
+        ok: isRealKey(webPk, ['pk_'], 'your_key') && isRealKey(webSk, ['sk_'], 'your_key'),
+        detail: isRealKey(webPk, ['pk_'], 'your_key') && isRealKey(webSk, ['sk_'], 'your_key')
+            ? 'Web NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY + CLERK_SECRET_KEY ready'
+            : 'Web Clerk key pair incomplete (set apps/web/.env.local)',
+        requiredFor: 'keys',
     });
     checks.push({
         id: 'webhook_secret',
@@ -51,41 +122,50 @@ function runClerkPreflight() {
             ? isRealKey(webhookSecret, ['whsec_'], 'your_webhook')
                 ? 'CLERK_WEBHOOK_SECRET present'
                 : 'CLERK_WEBHOOK_SECRET looks like a placeholder'
-            : 'CLERK_WEBHOOK_SECRET missing (required for live membership sync)',
+            : 'CLERK_WEBHOOK_SECRET missing (set after functions deploy + Clerk webhook)',
+        requiredFor: 'webhook',
     });
-    checks.push({
-        id: 'web_pair',
-        ok: isRealKey(webPk, ['pk_'], 'your_key') && isRealKey(webSk, ['sk_'], 'your_key'),
-        detail: isRealKey(webPk, ['pk_'], 'your_key') && isRealKey(webSk, ['sk_'], 'your_key')
-            ? 'Web NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY + CLERK_SECRET_KEY ready'
-            : 'Web Clerk key pair incomplete (set apps/web/.env.local)',
-    });
-    const ready = checks.every(c => c.ok);
-    const status = ready ? 'ready' : 'externally_blocked';
+    const keysOk = checks.filter(c => c.requiredFor === 'keys').every(c => c.ok);
+    const webhookOk = checks.filter(c => c.requiredFor === 'webhook').every(c => c.ok);
+    const status = !keysOk ? 'externally_blocked' : webhookOk ? 'ready' : 'keys_ready';
     console.log('\n=== Clerk path preflight ===\n');
     for (const c of checks) {
         console.log(`${c.ok ? '✓' : '✗'} [${c.id}] ${c.detail}`);
     }
-    console.log(`\nstatus: ${status}\n` +
-        (ready
-            ? 'Keys look configured. Run docs/PHASE2B-MANUAL-VERIFICATION-CHECKLIST.md § Clerk path before claiming verification.\n'
-            : 'Clerk live path is externally blocked until real keys are provided. Do not claim Clerk verification.\n'));
+    console.log(`\nstatus: ${status}`);
+    if (status === 'ready') {
+        console.log('Keys + webhook secret configured. Run docs/PHASE2B-MANUAL-VERIFICATION-CHECKLIST.md § Clerk path before claiming verification.\n');
+    }
+    else if (status === 'keys_ready') {
+        console.log('Clerk pk/sk ready. Deploy functions, create Clerk webhook, set CLERK_WEBHOOK_SECRET, then re-run preflight.\n');
+    }
+    else {
+        console.log('Clerk live path is externally blocked until real pk_/sk_ keys are provided. Do not claim Clerk verification.\n');
+    }
     console.log(JSON.stringify({
         status,
         checks,
         next: status === 'ready'
             ? [
-                'Configure clerkWebhook in Clerk Dashboard',
+                'Confirm clerkWebhook URL in Clerk Dashboard',
                 'Create University A/B orgs + memberships',
                 'bootstrapOrganizationMemberships',
                 'Run Clerk checklist and record evidence',
             ]
-            : [
-                'Copy apps/web/.env.local.example → .env.local with real pk_/sk_',
-                'Copy firebase/functions/.env.example → .env with real sk_/whsec_',
-                'Re-run: npm run preflight:clerk',
-            ],
+            : status === 'keys_ready'
+                ? [
+                    'firebase login (or FIREBASE_TOKEN) + set .firebaserc project',
+                    'cd firebase/functions && npm run deploy',
+                    'Clerk Dashboard → Webhooks → endpoint = clerkWebhook URL',
+                    'Set CLERK_WEBHOOK_SECRET=whsec_... in functions env / secrets',
+                    'npm run preflight:clerk  # expect status: ready',
+                ]
+                : [
+                    'Copy apps/web/.env.local.example → .env.local with real pk_/sk_',
+                    'Copy firebase/functions/.env.example → .env with real sk_',
+                    'Re-run: npm run preflight:clerk',
+                ],
     }, null, 2));
-    process.exit(ready ? 0 : 2);
+    process.exit(status === 'ready' ? 0 : status === 'keys_ready' ? 1 : 2);
 }
 runClerkPreflight();

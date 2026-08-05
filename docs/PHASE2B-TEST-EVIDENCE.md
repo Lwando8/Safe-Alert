@@ -44,15 +44,16 @@ Result: **probe:phase2b 8/8** and **probe:phase2d 10/10** passed
 
 ## 4. Clerk probes
 
-**Status: externally blocked** — `npm run preflight:clerk` → `externally_blocked` (no real keys).
-
-Preflight command:
+**Status: `keys_ready` (2026-08-05 refresh)** — web + functions `pk_test`/`sk_test` present in local gitignored env; `CLERK_WEBHOOK_SECRET` still missing until Functions deploy + Clerk Dashboard webhook.
 
 ```bash
 cd firebase/functions && npm run preflight:clerk
+# → status: keys_ready (exit 1)
 ```
 
-Exact steps to complete: see `PHASE2B-MANUAL-VERIFICATION-CHECKLIST.md` § Clerk path.
+Previously `externally_blocked` when keys were absent. Live checklist still **not** claimed.
+
+Exact next steps: [`PHASE2-OPERATOR-NEXT-STEPS.md`](./PHASE2-OPERATOR-NEXT-STEPS.md) and `PHASE2B-MANUAL-VERIFICATION-CHECKLIST.md` § Clerk path.
 
 ## 5. `/ops/incidents` UI states
 

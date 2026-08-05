@@ -31,6 +31,10 @@ Clerk-preferred / Firebase-legacy adapter, removal gate, stop-gate = tenant-safe
 ### Phase 2C / 2D
 - [`PHASE2C-OPS-PLATFORM-HARDENING.md`](./PHASE2C-OPS-PLATFORM-HARDENING.md)
 - [`PHASE2D-ISOLATION-TESTS.md`](./PHASE2D-ISOLATION-TESTS.md)
+
+### Operator next (deploy + live Clerk)
+**👉 [`PHASE2-OPERATOR-NEXT-STEPS.md`](./PHASE2-OPERATOR-NEXT-STEPS.md)**  
+Firebase Functions deploy (Cloud Run), webhook secret, Vercel Root Directory, deferred mobile cutover.
 ---
 
 ## 📋 PLANNING & ANALYSIS
