@@ -290,14 +290,13 @@ describe('webhook delivery semantics', () => {
 
 describe('cache/UI isolation contract', () => {
   it('documents required client clearing behaviour', () => {
-    // Enforced in IncidentsClient: sign-out clears state; org key change reloads;
-    // unauthorized responses replace prior incident arrays.
     const behaviours = [
       'sign_out_clears_incidents',
       'org_switch_invalidates_query',
       'unauthorized_hides_prior_data',
+      'ops_shells_remount_on_tenant_epoch',
     ];
-    expect(behaviours).toHaveLength(3);
+    expect(behaviours).toHaveLength(4);
   });
 });
 

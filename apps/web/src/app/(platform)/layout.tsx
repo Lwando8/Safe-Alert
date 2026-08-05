@@ -1,4 +1,5 @@
 import { ShellNav } from "@/components/shell-nav";
+import { PlatformAdminGate } from "@/components/platform-admin-gate";
 
 const navItems = [
   { href: "/platform", label: "Overview" },
@@ -22,7 +23,9 @@ export default function PlatformLayout({
         variant="platform"
         footer="Cross-tenant super-admin · separate from university ops"
       />
-      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <PlatformAdminGate>{children}</PlatformAdminGate>
+      </div>
     </div>
   );
 }

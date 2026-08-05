@@ -1,5 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse, type NextRequest } from 'next/server'
+import { isClerkConfigured, resolveProtectedRouteRedirect } from '@/lib/auth-guards'
 
 const isPublicRoute = createRouteMatcher([
   '/',
@@ -10,19 +11,6 @@ const isPublicRoute = createRouteMatcher([
 ])
 
 const isOrgSelectionRoute = createRouteMatcher(['/select-organization(.*)'])
-const isPlatformRoute = createRouteMatcher(['/platform(.*)'])
-const isOpsRoute = createRouteMatcher(['/ops(.*)'])
-
-function clerkConfigured(): boolean {
-  const pk = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? ''
-  const sk = process.env.CLERK_SECRET_KEY ?? ''
-  return (
-    pk.startsWith('pk_') &&
-    sk.startsWith('sk_') &&
-    !pk.includes('your_key') &&
-    !sk.includes('your_key')
-  )
-}
 
 const clerkAuthMiddleware = clerkMiddleware(async (auth, req) => {
   const { userId, orgId, sessionClaims } = await auth()
@@ -42,8 +30,13 @@ const clerkAuthMiddleware = clerkMiddleware(async (auth, req) => {
     return NextResponse.next()
   }
 
-  if (!userId) {
-    // Avoid redirect loops: never bounce auth pages onto themselves.
+  const redirect = resolveProtectedRouteRedirect(pathname, {
+    userId,
+    orgId,
+    sessionClaims: sessionClaims as { metadata?: { platformAdmin?: boolean } } | null,
+  })
+
+  if (redirect === '/sign-in') {
     if (pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')) {
       return NextResponse.next()
     }
@@ -52,14 +45,11 @@ const clerkAuthMiddleware = clerkMiddleware(async (auth, req) => {
     return NextResponse.redirect(signInUrl)
   }
 
-  if (isPlatformRoute(req)) {
-    const metadata = sessionClaims?.metadata as { platformAdmin?: boolean } | undefined
-    if (metadata?.platformAdmin !== true) {
-      return NextResponse.redirect(new URL('/unauthorized', req.url))
-    }
+  if (redirect === '/unauthorized') {
+    return NextResponse.redirect(new URL('/unauthorized', req.url))
   }
 
-  if (isOpsRoute(req) && !orgId) {
+  if (redirect === '/select-organization') {
     return NextResponse.redirect(new URL('/select-organization', req.url))
   }
 
@@ -71,7 +61,7 @@ function passthroughMiddleware(_req: NextRequest) {
   return NextResponse.next()
 }
 
-export default clerkConfigured() ? clerkAuthMiddleware : passthroughMiddleware
+export default isClerkConfigured() ? clerkAuthMiddleware : passthroughMiddleware
 
 export const config = {
   matcher: [

@@ -11,7 +11,7 @@ Command:
 cd firebase/functions && npm test
 ```
 
-Result: **33 passed / 0 failed** across:
+Result: **44 passed / 0 failed** across:
 
 | File | Focus |
 |---|---|
@@ -19,6 +19,8 @@ Result: **33 passed / 0 failed** across:
 | `authPolicy.test.ts` | Tenant match, permissions, platform Firebase reject, fallback flag |
 | `tenantIsolation.test.ts` | Incident reads/writes contract, identity fail-closed, push fan-out, UI isolation contract |
 | `membershipWebhook.test.ts` | Org upsert, membership CRUD, duplicate, out-of-order, unknown org/user, tenant conflict, signature, missing fields |
+| `incidentWrites.test.ts` | Accept/assign/update/close-permission write-path isolation (Phase 2D) |
+| `authGuards.test.ts` | Ops/platform route guard contract (Phase 2C) |
 
 ## 2. TypeScript build
 
@@ -35,49 +37,47 @@ Emulators: Auth `:9099`, Firestore `:8080`, UI `:4001`
 ```bash
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren npm run seed:phase2b
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren npm run probe:phase2b
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren npm run probe:phase2d
 ```
 
-Result: **8/8 passed**
-
-| Probe | Result |
-|---|---|
-| create-stamp (server org, ignore client spoof) | PASS |
-| read-a (A sees A, not B fixture) | PASS |
-| cross-tenant-read (B cannot see A probe) | PASS |
-| cross-tenant-write-guard | PASS |
-| permission-deny | PASS |
-| suspended-membership | PASS |
-| push-isolation | PASS |
-| fallback-disable | PASS |
+Result: **probe:phase2b 8/8** and **probe:phase2d 10/10** passed
 
 ## 4. Clerk probes
 
-**Status: externally blocked** — no `pk_`/`sk_` Clerk secrets in this environment (`apps/web/.env.local` absent).
+**Status: externally blocked** — `npm run preflight:clerk` → `externally_blocked` (no real keys).
+
+Preflight command:
+
+```bash
+cd firebase/functions && npm run preflight:clerk
+```
 
 Exact steps to complete: see `PHASE2B-MANUAL-VERIFICATION-CHECKLIST.md` § Clerk path.
 
 ## 5. `/ops/incidents` UI states
 
-Implemented and type-checked in code:
+Implemented and type-checked in code (Phase 2C tenant boundary remounts on org switch):
 
-- loading
-- empty
-- error / unavailable
-- unauthorized / no membership / permission denied
-- clerk unconfigured
-- org-switch / sign-out clears tenant state
+- loading / empty / error / unavailable / unauthorized / clerk-unconfigured
+- org-switch / sign-out clears tenant state via `OpsTenantBoundary`
 
 Live signed-in UI walkthrough: **blocked on Clerk credentials**.
 
-## 6. Cross-tenant / revocation / push
+## 6. Cross-tenant / revocation / push / writes
 
 | Case | Evidence |
 |---|---|
-| A cannot read B | Emulator probe + unit tests |
-| Client org tampering ignored | Probe `create-stamp` + API ignores query `organizationId` |
-| Suspended membership rejected | Probe + membership loader tests |
-| Push A≠B fan-out | Probe + unit tests |
+| A cannot read B | Emulator probe 2B + unit tests |
+| A cannot accept/assign/update B | Emulator probe 2D + `incidentWrites` tests |
+| Client org tampering ignored | Probe create-stamp + API ignores query `organizationId` |
+| Suspended/revoked membership rejected | Probe 2D + membership loader |
+| Push A≠B fan-out | Probe 2B + unit tests |
+| Ops/platform separation | `authGuards` tests + middleware |
+
+## 7. CI
+
+`.github/workflows/phase2-functions.yml` — `npm test` + `npm run build` (no Clerk secrets).
 
 ## Classification input
 
-Because Firebase emulator path is verified and Clerk live path is credential-blocked, overall Phase 2B classification is **tenant-safe but partially verified**.
+Because Firebase emulator paths (2B+2D) are verified and Clerk live path is credential-blocked, overall classification remains **tenant-safe but partially verified**.

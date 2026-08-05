@@ -1,6 +1,6 @@
 'use client';
 
-import { useAuth, useOrganization } from '@clerk/nextjs';
+import { useAuth } from '@clerk/nextjs';
 import { useCallback, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -11,6 +11,8 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useOpsTenantBoundary } from '@/components/ops-tenant-boundary';
+import { isClerkPublishableConfigured } from '@/lib/auth-guards';
 
 export type OpsIncidentRow = {
   id: string;
@@ -34,11 +36,6 @@ type LoadState =
       code: string;
       message: string;
     };
-
-function clerkPublishableKeyConfigured(): boolean {
-  const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
-  return key.startsWith('pk_') && !key.includes('your_key');
-}
 
 function formatTime(ts?: number) {
   if (!ts) return '—';
@@ -70,7 +67,7 @@ type IncidentsClientProps = {
 };
 
 export function IncidentsClient({ initial, clerkEnabled }: IncidentsClientProps) {
-  if (!clerkEnabled || !clerkPublishableKeyConfigured()) {
+  if (!clerkEnabled || !isClerkPublishableConfigured()) {
     return (
       <StateCard
         title="Authentication unavailable"
@@ -90,9 +87,8 @@ function IncidentsClientAuthed({
 }: {
   initial: IncidentsClientProps['initial'];
 }) {
-  const { isSignedIn, orgId, orgSlug, signOut } = useAuth();
-  const { organization } = useOrganization();
-  const activeOrgKey = orgSlug || organization?.slug || orgId || 'none';
+  const { signOut } = useAuth();
+  const { activeOrgKey, tenantEpoch, isSignedIn } = useOpsTenantBoundary();
 
   const [state, setState] = useState<LoadState>(() => {
     if (initial.ok && initial.organizationId) {
@@ -164,7 +160,7 @@ function IncidentsClientAuthed({
     }
     setState({ kind: 'loading' });
     void load();
-  }, [activeOrgKey, isSignedIn, load]);
+  }, [activeOrgKey, tenantEpoch, isSignedIn, load]);
 
   if (state.kind === 'loading') {
     return (
@@ -216,7 +212,8 @@ function IncidentsClientAuthed({
 
       {showOrgDiagnostics ? (
         <p className="rounded-md border border-dashed border-border bg-muted/40 px-3 py-2 font-mono text-xs text-muted-foreground">
-          diagnostics: organizationId={organizationId} · authProvider=clerk · orgKey={activeOrgKey}
+          diagnostics: organizationId={organizationId} · authProvider=clerk · orgKey=
+          {activeOrgKey} · epoch={tenantEpoch}
         </p>
       ) : null}
 

@@ -7,6 +7,7 @@ cd firebase/functions
 npm test
 npm run build
 npm run smoke:phase2b
+npm run preflight:clerk   # ready | externally_blocked (does not claim verification)
 ```
 
 ## Emulator Firebase path
@@ -20,18 +21,10 @@ npm run smoke:phase2b
 cd firebase/functions
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren npm run seed:phase2b
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren npm run probe:phase2b
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren npm run probe:phase2d
 ```
 
-Expected probe IDs all `ok: true`:
-
-- [x] `create-stamp`
-- [x] `read-a`
-- [x] `cross-tenant-read`
-- [x] `cross-tenant-write-guard`
-- [x] `permission-deny`
-- [x] `suspended-membership`
-- [x] `push-isolation`
-- [x] `fallback-disable`
+Expected probe IDs all `ok: true` (2B + 2D write-path probes).
 
 ### Manual ops UI (when Clerk + emulator available)
 
@@ -40,26 +33,60 @@ Expected probe IDs all `ok: true`:
 3. Sign in as University A supervisor mapped to `user_clerk_a`
 4. Open `http://localhost:3000/ops/incidents` — see only University A incidents
 5. Attempt `/api/ops/incidents?organizationId=university-b` — still returns A only
-6. Switch org / sign out — prior incidents cleared
+6. Switch org / sign out — prior incidents cleared (ops tenant boundary remounts)
 7. Suspend membership in Firestore → expect membership inactive error
 
 ## Clerk path (external credentials)
 
-When Clerk keys **are** available:
+Record results as `PASS` / `FAIL` / `BLOCKED`.
+
+### Preflight
+
+```bash
+cd firebase/functions
+# Load functions .env if present, then:
+npm run preflight:clerk
+```
+
+| Check | Result | Notes |
+|---|---|---|
+| `preflight:clerk` status | BLOCKED / ready | Agent default without secrets: **BLOCKED** |
+| Web `.env.local` pk_/sk_ | | |
+| Functions `CLERK_SECRET_KEY` | | |
+| `CLERK_WEBHOOK_SECRET` | | |
+
+### Live steps (only when preflight = ready)
 
 ```bash
 # 1. Configure apps/web/.env.local and firebase/functions/.env
-# 2. Deploy or tunnel clerkWebhook; set CLERK_WEBHOOK_SECRET
-# 3. Create University A/B orgs + memberships in Clerk
-# 4. Bootstrap memberships:
+# 2. Deploy or tunnel clerkWebhook; set CLERK_WEBHOOK_SECRET in Clerk Dashboard
+#    Events: organizationMembership.created/updated/deleted, organization.created/updated
+# 3. Create University A/B orgs + memberships in Clerk (custom roles)
+# 4. Set platformAdmin=true on a platform user publicMetadata
+# 5. Bootstrap memberships:
 #    bootstrapOrganizationMemberships({ clerkOrganizationId, bootstrapSecret })
-# 5. Sign in via /sign-in, select org, open /ops/incidents
-# 6. Revoke membership in Clerk → webhook → retry ops list → denied
-# 7. Confirm Authorization: Bearer <Clerk JWT> on callable createIncident
-#    and that Firebase fallback is not used when Clerk JWT is valid
+# 6. Sign in via /sign-in, select org, open /ops/incidents
+# 7. GET /api/ops/incidents?organizationId=university-b → still session org only
+# 8. Revoke membership in Clerk → webhook → retry ops list → denied
+# 9. Callable createIncident with Authorization: Bearer <Clerk JWT>
+#    Confirm authProvider=clerk (Firebase fallback not used when Clerk JWT valid)
+# 10. Non-platformAdmin user → /platform → /unauthorized
+# 11. Signed-in user without org → /ops → /select-organization
 ```
 
+| Step | Result | Evidence |
+|---|---|---|
+| Sign-in + org select | | |
+| `/ops/incidents` tenant list | | |
+| Org ID spoof ignored | | |
+| Membership revoke | | |
+| Clerk JWT on callable | | |
+| `/platform` admin-only | | |
+| `/ops` requires org | | |
+
 When Clerk keys **are not** available: mark Clerk path **externally blocked**. Do not claim Clerk verification.
+
+**Agent environment (2026-08-05):** `externally_blocked` — no `apps/web/.env.local` / functions `.env` with real keys.
 
 ## Push registration
 
@@ -69,4 +96,5 @@ When Clerk keys **are not** available: mark Clerk path **externally blocked**. D
 ## Platform surfaces
 
 - [x] Code: `linkIdentity` / bootstrap disallow Firebase fallback
-- [ ] Live `/platform/*` Clerk-only check with platformAdmin metadata
+- [x] Code: middleware + platform soft-guard require `platformAdmin` (Phase 2C)
+- [ ] Live `/platform/*` Clerk-only check with platformAdmin metadata (needs keys)

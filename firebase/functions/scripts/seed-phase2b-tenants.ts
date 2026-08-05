@@ -220,6 +220,80 @@ async function run() {
     updatedAt: now,
   });
 
+  // Phase 2D write-path fixtures: responder units per university
+  await db.doc('responderUnits/unit_a1').set(
+    {
+      id: 'unit_a1',
+      unitCode: 'UNIT-A1',
+      responderType: 'campus_security',
+      organizationId: 'university-a',
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+  await db.doc('responderUnits/unit_b1').set(
+    {
+      id: 'unit_b1',
+      unitCode: 'UNIT-B1',
+      responderType: 'campus_security',
+      organizationId: 'university-b',
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+
+  await db.doc('memberships/mem_a_responder').set(
+    {
+      id: 'mem_a_responder',
+      clerkMembershipId: 'clerk_mem_a_responder',
+      clerkOrganizationId: 'org_clerk_a',
+      organizationId: 'university-a',
+      userId: 'user_clerk_a_responder',
+      siteId: siteA,
+      kind: 'security_guard',
+      status: 'active',
+      clerkRole: 'org:responder',
+      permissions: [
+        'incidents:read-all',
+        'incidents:acknowledge',
+        'incidents:update',
+        'responders:read',
+        'sites:read',
+      ],
+      responderProfile: {
+        unitCode: 'unit_a1',
+        responderType: 'campus_security',
+        approvalStatus: 'approved',
+        employmentStatus: 'active',
+      },
+      createdAt: now,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+
+  await db.doc('memberships/mem_a_revoked').set(
+    {
+      id: 'mem_a_revoked',
+      clerkMembershipId: 'clerk_mem_a_revoked',
+      clerkOrganizationId: 'org_clerk_a',
+      organizationId: 'university-a',
+      userId: 'user_clerk_a_revoked',
+      siteId: siteA,
+      kind: 'student',
+      status: 'revoked',
+      clerkRole: 'org:student',
+      permissions: ['incidents:create'],
+      createdAt: now,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+
   console.log(
     JSON.stringify(
       {
@@ -227,6 +301,7 @@ async function run() {
         organizations: ['university-a', 'university-b'],
         sites: { 'university-a': siteA, 'university-b': siteB },
         incidents: ['fixture_inc_a', 'fixture_inc_b'],
+        responderUnits: ['unit_a1', 'unit_b1'],
       },
       null,
       2

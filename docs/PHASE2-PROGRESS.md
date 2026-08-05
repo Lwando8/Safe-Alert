@@ -1,9 +1,9 @@
 # PHASE 2 — MEMBERSHIP SYSTEM IMPLEMENTATION PROGRESS
 
 **Date Started**: 2026-08-05  
-**Status**: IN PROGRESS — Phase 2B tenant incident verification slice complete (**tenant-safe but partially verified**)
+**Status**: IN PROGRESS — Phase 2C ops/platform hardening + Phase 2D isolation tests landed; Clerk live path still **externally blocked**
 
-**Phase 2B stop-gate**: **tenant-safe but partially verified** — migrated APIs + `/ops/incidents` enforce org via server membership; Firebase emulator probes 8/8; Clerk live path externally blocked; Firebase fallback still required for mobile. See [PHASE2B-STOP-GATE-REPORT.md](./PHASE2B-STOP-GATE-REPORT.md).
+**Phase 2B/2C/2D stop-gate**: **tenant-safe but partially verified** — migrated APIs + `/ops/incidents` + ops tenant boundary; automated write-path probes 10/10; Clerk live path blocked without keys; Firebase fallback still required for mobile. See [PHASE2B-STOP-GATE-REPORT.md](./PHASE2B-STOP-GATE-REPORT.md), [PHASE2C-OPS-PLATFORM-HARDENING.md](./PHASE2C-OPS-PLATFORM-HARDENING.md), [PHASE2D-ISOLATION-TESTS.md](./PHASE2D-ISOLATION-TESTS.md).
 
 ---
 
@@ -115,11 +115,25 @@
 ### 15. Testing & Verification (2B verification slice)
 - [x] Smoke script + verification matrix (`scripts/phase2b-smoke.ts`) ✅
 - [x] Local policy assertions (cross-tenant deny) ✅
-- [x] Vitest isolation + webhook suite (33 tests) ✅
+- [x] Vitest isolation + webhook suite ✅
 - [x] Emulator University A/B fixtures (`seed-phase2b-tenants`) ✅
 - [x] Emulator cross-tenant probe (`probe:phase2b`, 8/8) ✅
+- [x] Clerk preflight script (`preflight:clerk`) — reports externally_blocked without keys ✅
 - [ ] Live Clerk organization probes — externally blocked (no keys in agent env)
 - [ ] Physical-device iOS/Android — removal gate
+
+### 16. Phase 2C — Ops / platform hardening
+- [x] Centralize auth guards (`auth-guards.ts`) + middleware ✅
+- [x] Platform soft-guard (`PlatformAdminGate`) ✅
+- [x] Ops tenant boundary remount on org-switch/sign-out ✅
+- [x] Keep `/platform/organizations` as shell ✅
+- [x] Docs: `PHASE2C-OPS-PLATFORM-HARDENING.md` ✅
+
+### 17. Phase 2D — Deeper isolation tests
+- [x] Vitest write-path suite (`incidentWrites.test.ts`) ✅
+- [x] Emulator probe `probe:phase2d` (10/10) ✅
+- [x] CI workflow `.github/workflows/phase2-functions.yml` ✅
+- [x] Docs: `PHASE2D-ISOLATION-TESTS.md` ✅
 ---
 
 ## 🚧 IN PROGRESS
@@ -131,7 +145,7 @@
 
 ---
 
-## 📋 REMAINING WORK (post-2B)
+## 📋 REMAINING WORK (post-2D)
 
 ### 10. Clerk Application Setup (Next Step)
 - [ ] Create Clerk application via CLI
@@ -141,6 +155,7 @@
 - [ ] Pull environment variables to `.env.local`
 - [ ] Create test organizations (University A & B)
 - [ ] Create test users with memberships
+- [ ] Run `npm run preflight:clerk` → ready, then live checklist
 
 ### 11. Mobile App Integration (Estimated: 1-2 days)
 - [ ] Update `App.tsx` with ClerkProvider
@@ -152,7 +167,7 @@
 - [ ] Test organization selection
 - [ ] **Then** execute Firebase fallback removal gate
 
-### 16. Documentation & Handoff (Estimated: 1 day)
+### 18. Documentation & Handoff (Estimated: 1 day)
 - [ ] Update API documentation
 - [ ] Create setup guide for new developers
 - [ ] Document membership lifecycle
