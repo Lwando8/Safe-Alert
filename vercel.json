@@ -1,10 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
   "installCommand": "npm install",
-  "builds": [
-    {
-      "src": "apps/web/package.json",
-      "use": "@vercel/next"
-    }
-  ]
+  "buildCommand": "npm run domain:build && npm run build --workspace=@seren/web && rm -rf .next && cp -a apps/web/.next .next && rm -rf public && cp -a apps/web/public public"
 }

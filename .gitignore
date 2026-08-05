@@ -7,6 +7,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Next.js (apps/web and root Vercel staging)
+.next/
+out/
+
 # Expo
 .expo/
 dist/
