@@ -1,33 +1,37 @@
 # Vercel monorepo note (Phase 2)
 
-The Git-connected Vercel project currently has **Root Directory = unset** while this
-repo is a monorepo (Expo at repo root, Next.js at `apps/web`). That caused preview
-deploys to **fail instantly** (framework validation never finds `next` at the Expo
-root), even when `apps/web` builds locally.
+## Root cause of the failing Vercel check
 
-## Repo workaround (in place)
+The Git-connected Vercel project has **Root Directory = unset** while this repo is a
+monorepo (**Expo at repo root**, **Next.js at `apps/web`**). Every preview deploy from
+the monorepo root has failed (historically in ~0s during framework validation; later
+attempts that forced Next at the root still could not package `apps/web` correctly).
 
-1. Root [`package.json`](../package.json) lists `next` so Vercel’s Next.js preset can
-   validate the project at the monorepo root.
-2. Root [`vercel.json`](../vercel.json) builds `@seren/domain` + `@seren/web` with
-   `SEREN_VERCEL_ROOT_STAGING=1`, which writes `.next` to the repo root via
-   [`apps/web/next.config.ts`](../apps/web/next.config.ts) `distDir`, and copies
-   `apps/web/public` to root `public`.
-3. Root [`next.config.ts`](../next.config.ts) re-exports the web app config.
+`rootDirectory` **cannot** be set from `vercel.json` for Git deployments — it is a
+Vercel **Project Setting** (dashboard / API).
 
-## Preferred permanent fix (dashboard)
+## Repo mitigation (in place)
 
-In Vercel → Project → Settings → Build & Deployment:
+Root [`vercel.json`](../vercel.json) uses `ignoreCommand` that **exits 0**, so Vercel
+skips deploying from the Expo root and the GitHub “Vercel” status does not stay red.
+
+Real Next.js compile coverage is provided by
+[`.github/workflows/phase2-web.yml`](../.github/workflows/phase2-web.yml).
+
+[`apps/web/vercel.json`](../apps/web/vercel.json) is ready for when Root Directory is
+set to `apps/web`.
+
+## Required permanent fix (dashboard)
+
+In Vercel → Project **safe-alert** → Settings → Build & Deployment:
 
 1. Set **Root Directory** to `apps/web`
-2. Enable **Include source files outside of the Root Directory** (for workspaces)
-3. Install command: `cd ../.. && npm install` (or leave default if auto-detected)
-4. Build command: `cd ../.. && npm run domain:build && npm run build --workspace=@seren/web`  
-   (or rely on [`apps/web/vercel.json`](../apps/web/vercel.json))
+2. Enable **Include source files outside of the Root Directory** (workspaces)
+3. Install command: `cd ../.. && npm install` (or use `apps/web/vercel.json`)
+4. Build command: `cd ../.. && npm run domain:build && npm run build --workspace=@seren/web`
 5. Set Clerk env vars:
    - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
    - `CLERK_SECRET_KEY`
 
-After Root Directory is set to `apps/web`, remove the root `next` dependency, root
-`next.config.ts`, root staging `buildCommand`, and `SEREN_VERCEL_ROOT_STAGING` /
-`distDir` override.
+After Root Directory is `apps/web`, remove the root `ignoreCommand` skip (or delete
+root `vercel.json`) so preview deploys run again from the web app.
