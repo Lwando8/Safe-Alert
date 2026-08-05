@@ -12,7 +12,7 @@ Local IDE preview / port-forward is **non-blocking**. Focus here.
 | Phase 2B–2D code + unit/emulator probes | Done |
 | Web Clerk `pk_test` / `sk_test` in `apps/web/.env.local` | Present |
 | Functions Clerk secret + publishable (local `.env`, gitignored) | Synced for agent |
-| `npm run preflight:clerk` | **`keys_ready`** (webhook secret still missing — expected pre-deploy) |
+| `npm run preflight:clerk` | **`ready`** (webhook configured + secret deployed) |
 | Firebase project | **`seren-sos`** (`.firebaserc` set; CLI logged in as project owner) |
 | Phase 2E client security rules (Firestore/RTDB deny) | **Live** on `seren-sos` `(default)` in **africa-south1**; RTDB deny rules live |
 | Firebase Functions / Cloud Run deploy | **Deployed** to `seren-sos` (us-central1) |
