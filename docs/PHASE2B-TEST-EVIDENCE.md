@@ -44,16 +44,16 @@ Result: **probe:phase2b 8/8** and **probe:phase2d 10/10** passed
 
 ## 4. Clerk probes
 
-**Status: `keys_ready` (2026-08-05 refresh)** — web + functions `pk_test`/`sk_test` present in local gitignored env; `CLERK_WEBHOOK_SECRET` still missing until Functions deploy + Clerk Dashboard webhook.
+**Status: `ready` (2026-08-05)** — Clerk pk/sk + webhook signing secret present locally (gitignored). Svix endpoint configured to `clerkWebhook` on `seren-sos` with organization + organizationMembership events. Live checklist still **not** claimed until manual University A/B probes pass.
 
 ```bash
 cd firebase/functions && npm run preflight:clerk
-# → status: keys_ready (exit 1)
+# → status: ready (exit 0)
 ```
 
-Previously `externally_blocked` when keys were absent. Live checklist still **not** claimed.
+Webhook URL: `https://us-central1-seren-sos.cloudfunctions.net/clerkWebhook`
 
-Exact next steps: [`PHASE2-OPERATOR-NEXT-STEPS.md`](./PHASE2-OPERATOR-NEXT-STEPS.md) and `PHASE2B-MANUAL-VERIFICATION-CHECKLIST.md` § Clerk path.
+Next: [`PHASE2B-MANUAL-VERIFICATION-CHECKLIST.md`](./PHASE2B-MANUAL-VERIFICATION-CHECKLIST.md) § Clerk path + [`PHASE2-OPERATOR-NEXT-STEPS.md`](./PHASE2-OPERATOR-NEXT-STEPS.md).
 
 ## 5. `/ops/incidents` UI states
 
