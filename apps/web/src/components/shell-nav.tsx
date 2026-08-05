@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
+import { ClerkNavControls } from "@/components/clerk-nav-controls";
 import { cn } from "@/lib/utils";
 
 export type ShellNavItem = {
@@ -68,33 +68,7 @@ export function ShellNav({
               : "border-sidebar-border",
           )}
         >
-          {showOrgSwitcher && (
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <OrganizationSwitcher
-                hidePersonal={variant === "university"}
-                afterSelectOrganizationUrl="/ops"
-                afterCreateOrganizationUrl="/ops"
-                appearance={{
-                  elements: {
-                    rootBox: "flex-1",
-                    organizationSwitcherTrigger: cn(
-                      "border rounded-md px-3 py-2 text-sm w-full justify-start",
-                      variant === "platform"
-                        ? "border-white/20 hover:bg-white/10"
-                        : "border-border hover:bg-accent",
-                    ),
-                  },
-                }}
-              />
-              <UserButton
-                appearance={{
-                  elements: {
-                    userButtonBox: "scale-110",
-                  },
-                }}
-              />
-            </div>
-          )}
+          {showOrgSwitcher ? <ClerkNavControls variant={variant} /> : null}
           {footer && (
             <div
               className={cn(
