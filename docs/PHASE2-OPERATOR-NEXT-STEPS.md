@@ -13,7 +13,8 @@ Local IDE preview / port-forward is **non-blocking**. Focus here.
 | Web Clerk `pk_test` / `sk_test` in `apps/web/.env.local` | Present |
 | Functions Clerk secret + publishable (local `.env`, gitignored) | Synced for agent |
 | `npm run preflight:clerk` | **`keys_ready`** (webhook secret still missing — expected pre-deploy) |
-| Firebase Functions / Cloud Run deploy | **Blocked** — no `firebase login` / `FIREBASE_TOKEN` / `.firebaserc` in this VM |
+| Firebase project | **`seren-sos`** (`.firebaserc` set) |
+| Firebase Functions / Cloud Run deploy | **Blocked** — no `firebase login` / `FIREBASE_TOKEN` in this VM |
 | Vercel preview from Expo monorepo root | Skipped via `ignoreCommand`; set Root Directory=`apps/web` in dashboard |
 | Mobile Clerk cutover / remove Firebase fallback | Deferred (removal gate) |
 
@@ -28,21 +29,21 @@ firebase login
 
 # from repo
 cd firebase
-firebase use <YOUR_FIREBASE_PROJECT_ID>   # creates/updates .firebaserc
+firebase use seren-sos   # already default in .firebaserc
 cd functions
 npm ci
 npm test
 npm run build
 
 # set runtime config / secrets (prefer Secret Manager for prod)
-firebase functions:secrets:set CLERK_SECRET_KEY
+firebase functions:secrets:set CLERK_SECRET_KEY --project seren-sos
 # after webhook exists:
-firebase functions:secrets:set CLERK_WEBHOOK_SECRET
+firebase functions:secrets:set CLERK_WEBHOOK_SECRET --project seren-sos
 
-npm run deploy   # firebase deploy --only functions
+npm run deploy   # firebase deploy --only functions --project seren-sos
 ```
 
-Note the HTTPS URL printed for **`clerkWebhook`** (region is typically `europe-west1` if that is how functions are configured).
+Note the HTTPS URL printed for **`clerkWebhook`**.
 
 ### Wire Clerk webhook
 
@@ -83,5 +84,6 @@ Dashboard (cannot be done from repo alone):
 
 ## Agent cannot proceed until you provide
 
-1. **Firebase project id** + auth (`firebase login` on your machine, or `FIREBASE_TOKEN` + `GOOGLE_APPLICATION_CREDENTIALS` for CI/agent)  
-2. After deploy: **`CLERK_WEBHOOK_SECRET`**
+1. ~~Firebase project id~~ → **`seren-sos`** recorded in `firebase/.firebaserc`  
+2. **Auth** — `firebase login` on your machine, or set **`FIREBASE_TOKEN`** (from `firebase login:ci`) in the agent/CI env  
+3. After deploy: **`CLERK_WEBHOOK_SECRET`**
