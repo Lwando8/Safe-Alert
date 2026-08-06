@@ -76,17 +76,17 @@ npm run preflight:clerk
 
 | Step | Result | Evidence |
 |---|---|---|
-| Sign-in + org select | PENDING | Live tenants ready; browser session not yet recorded |
-| `/ops/incidents` tenant list | PENDING | Same |
-| Org ID spoof ignored | PARTIAL | Emulator + unit **PASS**; live UI pending |
+| Sign-in + org select | **PASS** | Clerk ticket sign-in; University A active |
+| `/ops/incidents` tenant list | **PASS** | Empty list for university-a (no credential errors) |
+| Org ID spoof ignored | **PASS** | `/api/ops/incidents?organizationId=university-b` → `organizationId:"university-a"` |
 | Membership revoke | **PASS (webhook→Firestore)** | `organizationMembership.deleted` → status `revoked`; recreate → new active membership |
-| Clerk JWT on callable | PENDING | Needs signed-in session JWT |
-| `/platform` admin-only | PENDING | `platformAdmin` metadata set on platform user |
-| `/ops` requires org | PENDING | Code guards present |
+| Clerk JWT on callable | PENDING | Needs signed-in session JWT probe |
+| `/platform` admin-only | **PASS** | Ops A → `/unauthorized`; platformAdmin → `/platform` |
+| `/ops` requires org | **PASS** | Code guards + live org scoping |
 
 When Clerk keys **are not** available: mark Clerk path **externally blocked**. Do not claim Clerk verification.
 
-**Agent environment (2026-08-06):** Clerk path **`ready`** with live webhook sync verified. Full UI ops walkthrough still **PENDING** — see [`PHASE2B-LIVE-CLERK-EVIDENCE.md`](./PHASE2B-LIVE-CLERK-EVIDENCE.md).
+**Agent environment (2026-08-06):** Clerk path **`ready`** with live webhook sync + **UI walkthrough PASS** — see [`PHASE2B-LIVE-CLERK-EVIDENCE.md`](./PHASE2B-LIVE-CLERK-EVIDENCE.md) and [`PHASE2B-UI-WALKTHROUGH-2026-08-06.txt`](./PHASE2B-UI-WALKTHROUGH-2026-08-06.txt).
 
 ## Push registration
 

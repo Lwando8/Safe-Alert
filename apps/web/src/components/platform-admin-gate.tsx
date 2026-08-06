@@ -1,8 +1,12 @@
 'use client';
 
-import { useAuth } from '@clerk/nextjs';
+import { useAuth, useUser } from '@clerk/nextjs';
 import Link from 'next/link';
-import { isClerkPublishableConfigured, isPlatformAdmin } from '@/lib/auth-guards';
+import {
+  isClerkPublishableConfigured,
+  isPlatformAdmin,
+  readPlatformAdminFlag,
+} from '@/lib/auth-guards';
 import {
   Card,
   CardContent,
@@ -28,8 +32,9 @@ export function PlatformAdminGate({ children }: { children: React.ReactNode }) {
 
 function PlatformAdminGateAuthed({ children }: { children: React.ReactNode }) {
   const { isLoaded, userId, sessionClaims } = useAuth();
+  const { user, isLoaded: userLoaded } = useUser();
 
-  if (!isLoaded) {
+  if (!isLoaded || !userLoaded) {
     return (
       <main className="flex flex-1 flex-col gap-4 p-8">
         <p className="text-sm text-muted-foreground">Checking platform access…</p>
@@ -37,11 +42,12 @@ function PlatformAdminGateAuthed({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const allowed = isPlatformAdmin({
-    userId,
-    orgId: null,
-    sessionClaims: sessionClaims as { metadata?: { platformAdmin?: boolean } } | null,
-  });
+  const allowed =
+    isPlatformAdmin({
+      userId,
+      orgId: null,
+      sessionClaims: sessionClaims as Record<string, unknown> | null,
+    }) || readPlatformAdminFlag({ publicMetadata: user?.publicMetadata });
 
   if (!allowed) {
     return (

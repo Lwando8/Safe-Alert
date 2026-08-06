@@ -55,6 +55,14 @@ describe('ops/platform auth guards', () => {
         sessionClaims: { metadata: { platformAdmin: true } },
       })
     ).toBe(true);
+
+    expect(
+      isPlatformAdmin({
+        userId: 'user_1',
+        orgId: null,
+        sessionClaims: { publicMetadata: { platformAdmin: true } },
+      })
+    ).toBe(true);
   });
 
   it('requires organization for /ops', () => {

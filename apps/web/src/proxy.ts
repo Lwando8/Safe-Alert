@@ -1,6 +1,10 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { clerkMiddleware, createRouteMatcher, clerkClient } from '@clerk/nextjs/server'
 import { NextResponse, type NextRequest } from 'next/server'
-import { isClerkConfigured, resolveProtectedRouteRedirect } from '@/lib/auth-guards'
+import {
+  isClerkConfigured,
+  readPlatformAdminFlag,
+  resolveProtectedRouteRedirect,
+} from '@/lib/auth-guards'
 
 /**
  * Next.js 16+ Clerk entrypoint (proxy.ts).
@@ -15,6 +19,17 @@ const isPublicRoute = createRouteMatcher([
 ])
 
 const isOrgSelectionRoute = createRouteMatcher(['/select-organization(.*)'])
+
+async function resolvePlatformAdminFromUser(userId: string | null | undefined): Promise<boolean> {
+  if (!userId) return false
+  try {
+    const client = await clerkClient()
+    const user = await client.users.getUser(userId)
+    return readPlatformAdminFlag({ publicMetadata: user.publicMetadata })
+  } catch {
+    return false
+  }
+}
 
 const clerkAuthMiddleware = clerkMiddleware(async (auth, req) => {
   const { userId, orgId, sessionClaims } = await auth()
@@ -34,10 +49,26 @@ const clerkAuthMiddleware = clerkMiddleware(async (auth, req) => {
     return NextResponse.next()
   }
 
+  let effectiveClaims = (sessionClaims as Record<string, unknown> | null) || null
+  // Session JWT may omit publicMetadata unless customized — fall back to Clerk user lookup.
+  if (
+    pathname.startsWith('/platform') &&
+    userId &&
+    !readPlatformAdminFlag(effectiveClaims)
+  ) {
+    const fromUser = await resolvePlatformAdminFromUser(userId)
+    if (fromUser) {
+      effectiveClaims = {
+        ...(effectiveClaims || {}),
+        metadata: { platformAdmin: true },
+      }
+    }
+  }
+
   const redirect = resolveProtectedRouteRedirect(pathname, {
     userId,
     orgId,
-    sessionClaims: sessionClaims as { metadata?: { platformAdmin?: boolean } } | null,
+    sessionClaims: effectiveClaims,
   })
 
   if (redirect === '/sign-in') {

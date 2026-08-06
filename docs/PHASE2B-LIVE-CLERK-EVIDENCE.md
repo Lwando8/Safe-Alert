@@ -59,13 +59,16 @@ Bootstrap path also exercised via `MembershipSyncService.syncOrganizationMembers
 | University A/B orgs + memberships | **PASS** | Clerk API + Firestore |
 | `platformAdmin` metadata | **PASS** | User public metadata |
 | Webhook sync create/update/delete | **PASS** | `webhookReceipts` + membership status |
-| Sign-in + org select (`/ops`) | **PENDING** | Needs browser session against web with Clerk |
-| `/ops/incidents` tenant list | **PENDING** | Browser |
-| Org ID spoof ignored | **PASS (code+emulator)** / **PENDING live UI** | Emulator probes + unit tests; live UI pending |
-| Membership revoke → ops denied | **PASS (data path)** / **PENDING live UI** | Webhook set `revoked`; UI denial pending |
-| Clerk JWT on callable | **PENDING** | Needs session JWT |
-| `/platform` admin-only | **PENDING** | Browser |
-| `/ops` requires org | **PENDING** | Browser |
+| Sign-in + org select (`/ops`) | **PASS** | Ticket sign-in + University A (2026-08-06 UI) |
+| `/ops/incidents` tenant list | **PASS** | Empty list for `university-a` (ADC + live Firestore) |
+| `/ops/responders` / `/ops/campus` | **PASS** | Membership + Main Campus site |
+| Org ID spoof ignored | **PASS** | API returned `organizationId:"university-a"` for `?organizationId=university-b` |
+| Membership revoke → ops denied | **PASS (data path)** | Webhook set `revoked` |
+| `/platform` admin-only | **PASS** | Ops A → `/unauthorized`; platformAdmin → console |
+| `/ops` requires org | **PASS** | Live org scoping |
+| Clerk JWT on callable | **PENDING** | Separate callable probe |
+
+UI transcript: [`PHASE2B-UI-WALKTHROUGH-2026-08-06.txt`](./PHASE2B-UI-WALKTHROUGH-2026-08-06.txt)
 
 ## Test accounts (non-production)
 

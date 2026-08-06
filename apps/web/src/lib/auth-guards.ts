@@ -8,7 +8,7 @@
 export type SessionLike = {
   userId: string | null | undefined;
   orgId: string | null | undefined;
-  sessionClaims?: { metadata?: { platformAdmin?: boolean } } | null;
+  sessionClaims?: Record<string, unknown> | null;
 };
 
 export function isClerkPublishableConfigured(
@@ -34,8 +34,29 @@ export function isClerkConfigured(env: {
   );
 }
 
+/**
+ * Read platformAdmin from common Clerk claim shapes.
+ * Session tokens only include publicMetadata when the instance JWT is customized;
+ * callers may also pass a claims-like object built from user.publicMetadata.
+ */
+export function readPlatformAdminFlag(claims: unknown): boolean {
+  if (!claims || typeof claims !== 'object') return false;
+  const c = claims as Record<string, unknown>;
+  const metadata = c.metadata;
+  if (metadata && typeof metadata === 'object') {
+    if ((metadata as Record<string, unknown>).platformAdmin === true) return true;
+    if ((metadata as Record<string, unknown>).serenPlatformAdmin === true) return true;
+  }
+  const publicMetadata = c.publicMetadata ?? c.public_metadata;
+  if (publicMetadata && typeof publicMetadata === 'object') {
+    if ((publicMetadata as Record<string, unknown>).platformAdmin === true) return true;
+    if ((publicMetadata as Record<string, unknown>).serenPlatformAdmin === true) return true;
+  }
+  return false;
+}
+
 export function isPlatformAdmin(session: SessionLike): boolean {
-  return session.sessionClaims?.metadata?.platformAdmin === true;
+  return readPlatformAdminFlag(session.sessionClaims);
 }
 
 /**
