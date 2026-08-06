@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-06  
 **Firebase project:** `seren-sos`  
-**Classification update:** Clerk webhook + membership sync path verified live; full UI ops walkthrough still pending signed-in browser session.
+**Classification update:** Clerk webhook + membership sync verified live; UI walkthrough PASS on VM loopback; access-path guidance documented for Cursor forward / ephemeral tunnel.
 
 ## Preflight
 
@@ -68,8 +68,10 @@ Bootstrap path also exercised via `MembershipSyncService.syncOrganizationMembers
 | `/ops` requires org | **PASS** | Live org scoping |
 | Clerk JWT on callable | **PENDING** | Separate callable probe |
 
-UI transcript: [`PHASE2B-UI-WALKTHROUGH-2026-08-06.txt`](./PHASE2B-UI-WALKTHROUGH-2026-08-06.txt)
+UI transcript (VM loopback): [`PHASE2B-UI-WALKTHROUGH-2026-08-06.txt`](./PHASE2B-UI-WALKTHROUGH-2026-08-06.txt)  
+Access-path correction: [`PHASE2B-ACCESS-PATH.md`](./PHASE2B-ACCESS-PATH.md)  
+Public tunnel note: [`PHASE2B-TUNNEL-VERIFICATION.md`](./PHASE2B-TUNNEL-VERIFICATION.md)
 
 ## Test accounts (non-production)
 
-Passwords were set via Clerk Backend API for agent verification (`SerenTestPass1!`). Rotate/disable after operator handoff. Domains use `@example.com` (Clerk rejects `.local`).
+Passwords were set via Clerk Backend API for agent verification. Rotate/disable after operator handoff. Domains use `@example.com` (Clerk rejects `.local`). **Do not put passwords or tickets in git.**

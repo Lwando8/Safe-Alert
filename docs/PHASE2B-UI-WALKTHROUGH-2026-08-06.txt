@@ -2,6 +2,12 @@ UI WALKTHROUGH CLEAN RETEST - COOKIE ISOLATION REPORT
 ======================================================
 Date: 2026-08-06
 Test Type: Clean session with fresh incognito window
+ACCESS_PATH: vm_loopback
+
+NOTE: Phone/external `localhost:3000` failures are an access-path issue
+(Cloud Agent VM vs device loopback), not a Next.js server failure.
+Authoritative auth UI evidence here used VM loopback via agent browser.
+For external devices prefer Cursor Ports forward; see PHASE2B-ACCESS-PATH.md.
 
 TEST RESULTS SUMMARY
 ====================
@@ -17,33 +23,37 @@ SESSION 1: OPS A (ops.a@example.com)
    Org Slug: university-a
 
 ✅ PASS - Step 4a: /ops/incidents page
-   URL: 127.0.0.1:3000/ops/incidents
+   ACCESS_PATH: vm_loopback
+   URL path: /ops/incidents
    Diagnostics: organizationId=university-a, orgSlug=university-a
    Message: "No incidents found for organization university-a"
    Active Org: University A
 
 ✅ PASS - Step 4b: /ops/responders page
-   URL: 127.0.0.1:3000/ops/responders
+   ACCESS_PATH: vm_loopback
+   URL path: /ops/responders
    Subtitle: "Tenant-scoped units and memberships for university-a"
    Shows: 0 responder units, 1 security/control-room membership
    Active Org: University A
 
 ✅ PASS - Step 4c: /ops/campus page
-   URL: 127.0.0.1:3000/ops/campus
+   ACCESS_PATH: vm_loopback
+   URL path: /ops/campus
    Shows: "Sites - university-a" with 1 site
    Site: University A Main Campus
    Active Org: University A
 
 ✅ PASS - Step 5: API tenant isolation test
-   URL: 127.0.0.1:3000/api/ops/incidents?organizationId=university-b
+   ACCESS_PATH: vm_loopback
+   Path: /api/ops/incidents?organizationId=university-b
    Response: {"ok":true,"organizationId":"university-a","authProvider":"clerk","incidents":[]}
    CRITICAL: Even when query parameter attempted to access university-b,
              the API correctly enforced tenant isolation and returned university-a
    Active Org: University A
 
 ✅ PASS - Step 6: Platform access denial for Ops A
-   URL: Attempted 127.0.0.1:3000/platform
-   Redirected to: 127.0.0.1:3000/unauthorized
+   ACCESS_PATH: vm_loopback
+   Path attempted: /platform → redirected /unauthorized
    Message: "Access Denied - You don't have permission to access this page."
    User: Ops Alpha (ops.a@example.com)
    CRITICAL: Non-platform-admin user correctly denied access to /platform
@@ -63,7 +73,8 @@ SESSION 2: PLATFORM ADMIN (platform.admin@example.com)
          This indicates a potential Clerk configuration issue
 
 ✅ PASS - Step 9: Platform admin access successful
-   URL: 127.0.0.1:3000/platform
+   ACCESS_PATH: vm_loopback
+   Path: /platform
    Page: "Super-admin console"
    Description: "Provision and supervise organizations (universities). 
                  This surface stays separate from each university's 
