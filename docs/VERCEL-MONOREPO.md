@@ -35,3 +35,11 @@ In Vercel → Project **safe-alert** → Settings → Build & Deployment:
 
 After Root Directory is `apps/web`, remove the root `ignoreCommand` skip (or delete
 root `vercel.json`) so preview deploys run again from the web app.
+
+## Agent status (2026-08-06)
+
+- Repo prep: `apps/web/vercel.json` install/build commands ready.
+- Root `ignoreCommand` **kept** intentionally — removing it before dashboard Root Directory
+  is set would re-break the GitHub Vercel check.
+- Real Next compile coverage remains `.github/workflows/phase2-web.yml`.
+- Dashboard Root Directory change requires Vercel project admin (not settable from git alone).

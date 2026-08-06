@@ -44,16 +44,17 @@ Result: **probe:phase2b 8/8** and **probe:phase2d 10/10** passed
 
 ## 4. Clerk probes
 
-**Status: `ready` (2026-08-05)** — Clerk pk/sk + webhook signing secret present locally (gitignored). Svix endpoint configured to `clerkWebhook` on `seren-sos` with organization + organizationMembership events. Live checklist still **not** claimed until manual University A/B probes pass.
+**Status: `ready` + live webhook verified (2026-08-06)** — see [`PHASE2B-LIVE-CLERK-EVIDENCE.md`](./PHASE2B-LIVE-CLERK-EVIDENCE.md).
 
 ```bash
 cd firebase/functions && npm run preflight:clerk
 # → status: ready (exit 0)
 ```
 
-Webhook URL: `https://us-central1-seren-sos.cloudfunctions.net/clerkWebhook`
+Webhook URL: `https://us-central1-seren-sos.cloudfunctions.net/clerkWebhook` (Svix `c1Vc2T`)
 
-Next: [`PHASE2B-MANUAL-VERIFICATION-CHECKLIST.md`](./PHASE2B-MANUAL-VERIFICATION-CHECKLIST.md) § Clerk path + [`PHASE2-OPERATOR-NEXT-STEPS.md`](./PHASE2-OPERATOR-NEXT-STEPS.md).
+Live University A/B orgs, memberships, revoke/recreate, and webhook receipts: **PASS**.  
+Signed-in `/ops` browser walkthrough: **PENDING**.
 
 ## 5. `/ops/incidents` UI states
 
@@ -62,7 +63,7 @@ Implemented and type-checked in code (Phase 2C tenant boundary remounts on org s
 - loading / empty / error / unavailable / unauthorized / clerk-unconfigured
 - org-switch / sign-out clears tenant state via `OpsTenantBoundary`
 
-Live signed-in UI walkthrough: **blocked on Clerk credentials**.
+Live signed-in UI walkthrough: **PENDING** (credentials + tenants ready).
 
 ## 6. Cross-tenant / revocation / push / writes
 
@@ -71,7 +72,7 @@ Live signed-in UI walkthrough: **blocked on Clerk credentials**.
 | A cannot read B | Emulator probe 2B + unit tests |
 | A cannot accept/assign/update B | Emulator probe 2D + `incidentWrites` tests |
 | Client org tampering ignored | Probe create-stamp + API ignores query `organizationId` |
-| Suspended/revoked membership rejected | Probe 2D + membership loader |
+| Suspended/revoked membership rejected | Probe 2D + membership loader; **live webhook revoke → Firestore `revoked`** |
 | Push A≠B fan-out | Probe 2B + unit tests |
 | Ops/platform separation | `authGuards` tests + middleware |
 
@@ -81,4 +82,4 @@ Live signed-in UI walkthrough: **blocked on Clerk credentials**.
 
 ## Classification input
 
-Because Firebase emulator paths (2B+2D) are verified and Clerk live path is credential-blocked, overall classification remains **tenant-safe but partially verified**.
+Firebase emulator paths (2B+2D) verified; Clerk live **webhook/membership sync** verified on `seren-sos`. Full ops UI + Clerk JWT callable probes still pending. Overall classification remains **tenant-safe but partially verified** (Clerk data path upgraded from blocked → live-synced).

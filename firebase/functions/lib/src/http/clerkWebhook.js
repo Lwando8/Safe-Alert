@@ -142,7 +142,11 @@ exports.clerkWebhook = (0, https_1.onRequest)({
                     res.status(400).send('Missing membership id');
                     return;
                 }
-                await MembershipSyncService_1.MembershipSyncService.syncMembership(membershipId, { forceActive: true });
+                // Prefer full webhook payload (Clerk Backend SDK has no get-by-membership-id)
+                await MembershipSyncService_1.MembershipSyncService.syncMembership(event.data, {
+                    forceActive: true,
+                    clerkOrganizationId: event.data.organization?.id,
+                });
                 break;
             }
             case 'organizationMembership.updated': {
@@ -152,7 +156,10 @@ exports.clerkWebhook = (0, https_1.onRequest)({
                     res.status(400).send('Missing membership id');
                     return;
                 }
-                await MembershipSyncService_1.MembershipSyncService.syncMembership(membershipId, { forceActive: false });
+                await MembershipSyncService_1.MembershipSyncService.syncMembership(event.data, {
+                    forceActive: false,
+                    clerkOrganizationId: event.data.organization?.id,
+                });
                 break;
             }
             case 'organizationMembership.deleted': {

@@ -7,7 +7,10 @@ type ClerkWebhookEvent = {
   type: string;
   data: {
     id?: string;
+    role?: string;
     organization?: { id?: string; slug?: string; name?: string };
+    public_user_data?: { user_id?: string };
+    publicUserData?: { userId?: string };
     slug?: string;
     name?: string;
   };
@@ -131,7 +134,11 @@ export const clerkWebhook = onRequest(
             res.status(400).send('Missing membership id');
             return;
           }
-          await MembershipSyncService.syncMembership(membershipId, { forceActive: true });
+          // Prefer full webhook payload (Clerk Backend SDK has no get-by-membership-id)
+          await MembershipSyncService.syncMembership(event.data, {
+            forceActive: true,
+            clerkOrganizationId: event.data.organization?.id,
+          });
           break;
         }
         case 'organizationMembership.updated': {
@@ -141,7 +148,10 @@ export const clerkWebhook = onRequest(
             res.status(400).send('Missing membership id');
             return;
           }
-          await MembershipSyncService.syncMembership(membershipId, { forceActive: false });
+          await MembershipSyncService.syncMembership(event.data, {
+            forceActive: false,
+            clerkOrganizationId: event.data.organization?.id,
+          });
           break;
         }
         case 'organizationMembership.deleted': {

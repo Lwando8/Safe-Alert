@@ -50,10 +50,10 @@ npm run preflight:clerk
 
 | Check | Result | Notes |
 |---|---|---|
-| `preflight:clerk` status | BLOCKED / ready | Agent default without secrets: **BLOCKED** |
-| Web `.env.local` pk_/sk_ | | |
-| Functions `CLERK_SECRET_KEY` | | |
-| `CLERK_WEBHOOK_SECRET` | | |
+| `preflight:clerk` status | **ready** (2026-08-06) | See `PHASE2B-LIVE-CLERK-EVIDENCE.md` |
+| Web `.env.local` pk_/sk_ | **PASS** | Present (gitignored) |
+| Functions `CLERK_SECRET_KEY` | **PASS** | Present + deployed |
+| `CLERK_WEBHOOK_SECRET` | **PASS** | Rotated to Svix endpoint `c1Vc2T`; redeployed |
 
 ### Live steps (only when preflight = ready)
 
@@ -76,17 +76,17 @@ npm run preflight:clerk
 
 | Step | Result | Evidence |
 |---|---|---|
-| Sign-in + org select | | |
-| `/ops/incidents` tenant list | | |
-| Org ID spoof ignored | | |
-| Membership revoke | | |
-| Clerk JWT on callable | | |
-| `/platform` admin-only | | |
-| `/ops` requires org | | |
+| Sign-in + org select | PENDING | Live tenants ready; browser session not yet recorded |
+| `/ops/incidents` tenant list | PENDING | Same |
+| Org ID spoof ignored | PARTIAL | Emulator + unit **PASS**; live UI pending |
+| Membership revoke | **PASS (webhook→Firestore)** | `organizationMembership.deleted` → status `revoked`; recreate → new active membership |
+| Clerk JWT on callable | PENDING | Needs signed-in session JWT |
+| `/platform` admin-only | PENDING | `platformAdmin` metadata set on platform user |
+| `/ops` requires org | PENDING | Code guards present |
 
 When Clerk keys **are not** available: mark Clerk path **externally blocked**. Do not claim Clerk verification.
 
-**Agent environment (2026-08-05):** `externally_blocked` — no `apps/web/.env.local` / functions `.env` with real keys.
+**Agent environment (2026-08-06):** Clerk path **`ready`** with live webhook sync verified. Full UI ops walkthrough still **PENDING** — see [`PHASE2B-LIVE-CLERK-EVIDENCE.md`](./PHASE2B-LIVE-CLERK-EVIDENCE.md).
 
 ## Push registration
 

@@ -19,6 +19,12 @@ import {
   registerTenantPushToken,
 } from './incidents/tenantIncidentService';
 import { getAuth, getDb, getRtdb } from './firebaseApps';
+import {
+  clampRadiusKm,
+  filterIncidentsByRadius,
+  readLatLng,
+} from './services/geo';
+import { isFirebaseAuthFallbackEnabled } from './middleware/firebaseLegacyAdapter';
 
 const db = getDb();
 const auth = getAuth();
@@ -212,8 +218,21 @@ export const appendIncidentLocation = onCall(async req => {
 export const getNearbyIncidents = onCall(async req => {
   const context = await resolveRequestContextFromCallable(req);
   // Ignore any client-supplied organizationId
-  const { radiusKm = 25, incidentId } = req.data || {};
+  const { radiusKm: rawRadius, incidentId, latitude, longitude, location } = req.data || {};
+  const radiusKm = clampRadiusKm(rawRadius, 25);
+  const center =
+    readLatLng({ latitude, longitude }) ||
+    readLatLng(location) ||
+    null;
+
   const listed = await listTenantIncidents(context, { status: 'open', limit: 200 });
+  const incidents = center
+    ? filterIncidentsByRadius(
+        listed.incidents as Array<Record<string, unknown>>,
+        center,
+        radiusKm
+      )
+    : listed.incidents;
 
   if (incidentId) {
     const unitSnap = await db
@@ -224,6 +243,7 @@ export const getNearbyIncidents = onCall(async req => {
       .get();
     return {
       radiusKm,
+      center,
       organizationId: listed.organizationId,
       authProvider: listed.authProvider,
       units: unitSnap.docs.map(d => ({
@@ -232,15 +252,18 @@ export const getNearbyIncidents = onCall(async req => {
         canAssign: true,
         onShift: true,
       })),
-      incidents: listed.incidents,
+      incidents,
+      geoFiltered: !!center,
     };
   }
 
   return {
     radiusKm,
+    center,
     organizationId: listed.organizationId,
     authProvider: listed.authProvider,
-    incidents: listed.incidents,
+    incidents,
+    geoFiltered: !!center,
   };
 });
 
@@ -472,54 +495,166 @@ export const linkIdentity = onCall(async req => {
 });
 
 // ---------------------------------------------------------------------------
-// Unmigrated operational callables (still Firebase claims)
+// Shift / heartbeat (dual-auth preferred; Firebase RESPONDER_UNIT claims retained)
 // ---------------------------------------------------------------------------
 
+type ResponderOpsAuth =
+  | { mode: 'context'; context: RequestContext }
+  | {
+      mode: 'firebase_claims';
+      uid: string;
+      unitId: string;
+      organizationId: string | null;
+    };
+
+async function resolveResponderOpsAuth(req: {
+  auth?: { uid: string; token: Record<string, unknown> };
+  data?: unknown;
+  rawRequest?: { headers?: Record<string, unknown> };
+}): Promise<ResponderOpsAuth> {
+  try {
+    const context = await resolveRequestContextFromCallable(req as never);
+    authorizeAnyPermission(context, [
+      'incidents:acknowledge',
+      'responders:manage',
+      'incidents:update',
+    ]);
+    return { mode: 'context', context };
+  } catch (err) {
+    // Transitional: mobile/responder login may still use Firebase claims without identityLinks.
+    // Keep claim path until Phase G removal gate; never invent permissions from claims alone beyond role check.
+    if (!isFirebaseAuthFallbackEnabled()) throw err;
+    requireFirebaseAuth(req);
+    requireFirebaseRole(req, ['RESPONDER_UNIT']);
+    const unitId = String(req.auth!.token.unitId || '');
+    if (!unitId) {
+      throw new HttpsError('failed-precondition', 'No responder unit on Firebase token');
+    }
+    const organizationId =
+      typeof req.auth!.token.organizationId === 'string' && req.auth!.token.organizationId
+        ? String(req.auth!.token.organizationId)
+        : null;
+    return { mode: 'firebase_claims', uid: req.auth!.uid, unitId, organizationId };
+  }
+}
+
 export const startShift = onCall(async req => {
-  requireFirebaseAuth(req);
-  requireFirebaseRole(req, ['RESPONDER_UNIT']);
+  const authz = await resolveResponderOpsAuth(req);
   const { primaryOfficerId, secondaryOfficerId } = req.data || {};
+
+  if (authz.mode === 'context') {
+    const unitId = String(authz.context.unitId || '');
+    if (!unitId) {
+      throw new HttpsError('failed-precondition', 'No responder unit bound to membership');
+    }
+    const shiftRef = db.collection('shifts').doc();
+    const shift = {
+      id: shiftRef.id,
+      organizationId: authz.context.organizationId,
+      siteId: authz.context.siteId || null,
+      responderUnitId: unitId,
+      primaryOfficerId: String(primaryOfficerId || authz.context.userId || ''),
+      secondaryOfficerId: secondaryOfficerId || null,
+      active: true,
+      startedAt: now(),
+      authProvider: authz.context.authProvider,
+      membershipId: authz.context.membershipId,
+    };
+    await shiftRef.set(shift);
+    return { shift, unit: { id: unitId, organizationId: authz.context.organizationId } };
+  }
+
   const shiftRef = db.collection('shifts').doc();
   const shift = {
     id: shiftRef.id,
-    responderUnitId: String(req.auth!.token.unitId || ''),
+    organizationId: authz.organizationId,
+    responderUnitId: authz.unitId,
     primaryOfficerId: String(primaryOfficerId || ''),
     secondaryOfficerId: secondaryOfficerId || null,
     active: true,
     startedAt: now(),
+    authProvider: 'firebase' as const,
   };
   await shiftRef.set(shift);
-  return { shift, unit: { id: String(req.auth!.token.unitId || '') } };
+  return { shift, unit: { id: authz.unitId, organizationId: authz.organizationId } };
 });
 
 export const endShift = onCall(async req => {
-  requireFirebaseAuth(req);
-  requireFirebaseRole(req, ['RESPONDER_UNIT']);
-  const q = await db
-    .collection('shifts')
-    .where('responderUnitId', '==', String(req.auth!.token.unitId || ''))
-    .where('active', '==', true)
-    .limit(1)
-    .get();
-  if (!q.empty) {
-    await q.docs[0].ref.set({ active: false, endedAt: now() }, { merge: true });
+  const authz = await resolveResponderOpsAuth(req);
+  const unitId = authz.mode === 'context' ? String(authz.context.unitId || '') : authz.unitId;
+  const organizationId =
+    authz.mode === 'context' ? authz.context.organizationId : authz.organizationId;
+
+  if (!unitId) {
+    throw new HttpsError('failed-precondition', 'No responder unit bound');
   }
-  return { ok: true };
+
+  let target = organizationId
+    ? await db
+        .collection('shifts')
+        .where('organizationId', '==', organizationId)
+        .where('responderUnitId', '==', unitId)
+        .where('active', '==', true)
+        .limit(1)
+        .get()
+    : null;
+
+  if (!target || target.empty) {
+    target = await db
+      .collection('shifts')
+      .where('responderUnitId', '==', unitId)
+      .where('active', '==', true)
+      .limit(1)
+      .get();
+  }
+
+  if (!target.empty) {
+    const doc = target.docs[0]!;
+    const data = doc.data() as { organizationId?: string };
+    if (
+      organizationId &&
+      data.organizationId &&
+      data.organizationId !== organizationId
+    ) {
+      throw new HttpsError('permission-denied', 'Shift belongs to another organization');
+    }
+    await doc.ref.set(
+      {
+        active: false,
+        endedAt: now(),
+        ...(organizationId ? { organizationId } : {}),
+        authProvider: authz.mode === 'context' ? authz.context.authProvider : 'firebase',
+      },
+      { merge: true }
+    );
+  }
+  return { ok: true, organizationId };
 });
 
 export const unitHeartbeat = onCall(async req => {
-  requireFirebaseAuth(req);
-  requireFirebaseRole(req, ['RESPONDER_UNIT']);
+  const authz = await resolveResponderOpsAuth(req);
   const { unitCode, status, location } = req.data || {};
   if (!unitCode || !status) throw new HttpsError('invalid-argument', 'unitCode and status required');
-  await getRtdb().ref(`liveUnits/${unitCode}`).set({
+
+  const boundUnit = authz.mode === 'context' ? String(authz.context.unitId || '') : authz.unitId;
+  if (boundUnit && String(unitCode) !== boundUnit) {
+    throw new HttpsError('permission-denied', 'unitCode does not match bound responder unit');
+  }
+
+  const organizationId =
+    authz.mode === 'context' ? authz.context.organizationId : authz.organizationId;
+
+  await getRtdb().ref(`liveUnits/${String(unitCode)}`).set({
     lat: location?.latitude ?? null,
     lng: location?.longitude ?? null,
     status,
     lastSeenAt: now(),
-    uid: req.auth!.uid,
+    uid: authz.mode === 'context' ? actorUid(authz.context) : authz.uid,
+    organizationId: organizationId || null,
+    membershipId: authz.mode === 'context' ? authz.context.membershipId : null,
+    authProvider: authz.mode === 'context' ? authz.context.authProvider : 'firebase',
   });
-  return { ok: true };
+  return { ok: true, organizationId };
 });
 
 export const health = onCall(async () => ({

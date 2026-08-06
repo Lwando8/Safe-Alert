@@ -5,19 +5,34 @@
 
 Local IDE preview / port-forward is **non-blocking**. Focus here.
 
-## Current status (2026-08-05)
+## Current status (2026-08-06)
 
 | Item | Status |
 |---|---|
 | Phase 2B–2D code + unit/emulator probes | Done |
 | Web Clerk `pk_test` / `sk_test` in `apps/web/.env.local` | Present |
 | Functions Clerk secret + publishable (local `.env`, gitignored) | Synced for agent |
-| `npm run preflight:clerk` | **`ready`** (webhook configured + secret deployed) |
-| Firebase project | **`seren-sos`** (`.firebaserc` set; CLI logged in as project owner) |
-| Phase 2E client security rules (Firestore/RTDB deny) | **Live** on `seren-sos` `(default)` in **africa-south1**; RTDB deny rules live |
-| Firebase Functions / Cloud Run deploy | **Deployed** to `seren-sos` (us-central1) |
-| Vercel preview from Expo monorepo root | Skipped via `ignoreCommand`; set Root Directory=`apps/web` in dashboard |
+| `npm run preflight:clerk` | **`ready`** |
+| Live Clerk University A/B + webhook sync | **Verified** — see `PHASE2B-LIVE-CLERK-EVIDENCE.md` |
+| Firebase project | **`seren-sos`** |
+| Phase 2E client security rules (Firestore/RTDB deny) | **Live** |
+| Firebase Functions / Cloud Run deploy | **Deployed** (us-central1) |
+| Geo-radius on `getNearbyIncidents` | **Code landed** (filter when center provided) |
+| Shift/heartbeat dual-auth bridge | **Code landed** (claims path retained while fallback on) |
+| Ops shells | Incidents + **responders** + **campus** tenant-wired |
+| Mobile Clerk prep | **Flagged off by default** — `PHASE2G-MOBILE-CLERK-PREP.md` |
+| Phase 3/4 foundations | Docs only — `PHASE3-FOUNDATION.md` / `PHASE4-FOUNDATION.md` |
+| Vercel Root Directory=`apps/web` | **Dashboard still required**; root ignoreCommand kept |
 | Mobile Clerk cutover / remove Firebase fallback | Deferred (removal gate) |
+| `/platform/organizations` provisioning (D) | Deferred |
+
+## Operator remaining
+
+1. Vercel dashboard: Root Directory = `apps/web`, Clerk env vars, then remove root `ignoreCommand`
+2. Browser walkthrough: sign in as `ops.a@example.com` / University A → `/ops/incidents`, `/ops/responders`, `/ops/campus`
+3. Platform user: `platform.admin@example.com` with `platformAdmin` metadata → `/platform`
+4. Rotate test passwords after handoff
+5. Keep `ALLOW_FIREBASE_AUTH_FALLBACK` on until mobile device gate
 
 ## 1. Deploy Firebase Functions (Cloud Functions gen2 → Cloud Run)
 
@@ -78,31 +93,33 @@ Dashboard (cannot be done from repo alone):
 
 ## 4. Explicitly deferred
 
-- **Blaze billing** + Firebase Functions / Cloud Run deploy + Clerk webhook live sync  
-- Mobile Clerk cutover / `ALLOW_FIREBASE_AUTH_FALLBACK=false`  
-- Second **production** university onboarding  
-- `/platform/organizations` provisioning UI  
-- Client Firestore/RTDB org-claim re-open (after Clerk claims verified)  
-- Unmigrated callables (shifts/heartbeat/login*) until Functions can deploy  
+- Mobile Clerk cutover / `ALLOW_FIREBASE_AUTH_FALLBACK=false` (device gate)
+- `/platform/organizations` provisioning UI (track D)
+- Client Firestore/RTDB org-claim re-open (after Clerk claims verified)
+- `loginResponder` / `loginAdmin` / `registerCitizen` claim factories (still Firebase-oriented)
 
-## 5. Forging forward without Blaze (current)
+## 5. Completed in this pass
 
-1. ~~Phase 2E security rules~~ (this slice)  
-2. Next candidates: platform orgs shell → real read model; ops shell wiring; geo-radius on `getNearbyIncidents`; mobile Clerk prep (code only)  
+1. ~~Phase 2E security rules~~
+2. ~~Live Clerk webhook + University A/B membership sync~~
+3. ~~Geo-radius filter on `getNearbyIncidents`~~
+4. ~~Shift/heartbeat dual-auth bridge (claims retained)~~
+5. ~~Ops responders + campus tenant wiring~~
+6. ~~Mobile Clerk prep boundary (flagged off)~~
+7. ~~Phase 3/4 foundation docs~~
 
 ## Deployed endpoints
 
-- **clerkWebhook:** https://us-central1-seren-sos.cloudfunctions.net/clerkWebhook  
-- Callables live in **us-central1** (`createIncident`, `listOrgIncidents`, `registerPushToken`, …)
+- **clerkWebhook:** https://us-central1-seren-sos.cloudfunctions.net/clerkWebhook (Svix `c1Vc2T`)
+- Callables live in **us-central1** (`createIncident`, `listOrgIncidents`, `getNearbyIncidents`, `startShift`, …)
 
 ## Operator remaining
 
-1. Clerk Dashboard → Webhooks → endpoint = clerkWebhook URL above  
-   Subscribe: `organizationMembership.created|updated|deleted`, `organization.created|updated`  
-2. Set `CLERK_WEBHOOK_SECRET=whsec_...` in `firebase/functions/.env` / `.env.seren-sos` and redeploy  
-   (`./node_modules/.bin/firebase deploy --only functions:clerkWebhook --project seren-sos`)  
-3. `npm run preflight:clerk` → expect **`ready`**  
-4. Run live Clerk checklist
+1. Vercel dashboard: Root Directory = `apps/web`, Clerk env vars, then remove root `ignoreCommand`
+2. Browser walkthrough: sign in as `ops.a@example.com` / University A → `/ops/incidents`, `/ops/responders`, `/ops/campus`
+3. Platform user: `platform.admin@example.com` with `platformAdmin` metadata → `/platform`
+4. Rotate test passwords after handoff
+5. Keep `ALLOW_FIREBASE_AUTH_FALLBACK` on until mobile device gate
 
 ### CLI reminder (this repo)
 

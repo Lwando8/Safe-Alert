@@ -44,6 +44,8 @@ const clerkWebhook_1 = require("./http/clerkWebhook");
 Object.defineProperty(exports, "clerkWebhook", { enumerable: true, get: function () { return clerkWebhook_1.clerkWebhook; } });
 const tenantIncidentService_1 = require("./incidents/tenantIncidentService");
 const firebaseApps_1 = require("./firebaseApps");
+const geo_1 = require("./services/geo");
+const firebaseLegacyAdapter_1 = require("./middleware/firebaseLegacyAdapter");
 const db = (0, firebaseApps_1.getDb)();
 const auth = (0, firebaseApps_1.getAuth)();
 /** Legacy Firebase-claim helpers — only for unmigrated callables */
@@ -219,8 +221,15 @@ exports.appendIncidentLocation = (0, https_1.onCall)(async (req) => {
 exports.getNearbyIncidents = (0, https_1.onCall)(async (req) => {
     const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
     // Ignore any client-supplied organizationId
-    const { radiusKm = 25, incidentId } = req.data || {};
+    const { radiusKm: rawRadius, incidentId, latitude, longitude, location } = req.data || {};
+    const radiusKm = (0, geo_1.clampRadiusKm)(rawRadius, 25);
+    const center = (0, geo_1.readLatLng)({ latitude, longitude }) ||
+        (0, geo_1.readLatLng)(location) ||
+        null;
     const listed = await (0, tenantIncidentService_1.listTenantIncidents)(context, { status: 'open', limit: 200 });
+    const incidents = center
+        ? (0, geo_1.filterIncidentsByRadius)(listed.incidents, center, radiusKm)
+        : listed.incidents;
     if (incidentId) {
         const unitSnap = await db
             .collection('responderUnits')
@@ -230,6 +239,7 @@ exports.getNearbyIncidents = (0, https_1.onCall)(async (req) => {
             .get();
         return {
             radiusKm,
+            center,
             organizationId: listed.organizationId,
             authProvider: listed.authProvider,
             units: unitSnap.docs.map(d => ({
@@ -238,14 +248,17 @@ exports.getNearbyIncidents = (0, https_1.onCall)(async (req) => {
                 canAssign: true,
                 onShift: true,
             })),
-            incidents: listed.incidents,
+            incidents,
+            geoFiltered: !!center,
         };
     }
     return {
         radiusKm,
+        center,
         organizationId: listed.organizationId,
         authProvider: listed.authProvider,
-        incidents: listed.incidents,
+        incidents,
+        geoFiltered: !!center,
     };
 });
 /** Ops / control-room list — same tenant pipeline as getNearbyIncidents */
@@ -442,53 +455,133 @@ exports.linkIdentity = (0, https_1.onCall)(async (req) => {
     const id = await IdentityLinkService_1.IdentityLinkService.upsertLink({ clerkUserId, firebaseUid });
     return { ok: true, identityLinkId: id };
 });
-// ---------------------------------------------------------------------------
-// Unmigrated operational callables (still Firebase claims)
-// ---------------------------------------------------------------------------
+async function resolveResponderOpsAuth(req) {
+    try {
+        const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+        (0, requestContext_1.authorizeAnyPermission)(context, [
+            'incidents:acknowledge',
+            'responders:manage',
+            'incidents:update',
+        ]);
+        return { mode: 'context', context };
+    }
+    catch (err) {
+        // Transitional: mobile/responder login may still use Firebase claims without identityLinks.
+        // Keep claim path until Phase G removal gate; never invent permissions from claims alone beyond role check.
+        if (!(0, firebaseLegacyAdapter_1.isFirebaseAuthFallbackEnabled)())
+            throw err;
+        requireFirebaseAuth(req);
+        requireFirebaseRole(req, ['RESPONDER_UNIT']);
+        const unitId = String(req.auth.token.unitId || '');
+        if (!unitId) {
+            throw new https_1.HttpsError('failed-precondition', 'No responder unit on Firebase token');
+        }
+        const organizationId = typeof req.auth.token.organizationId === 'string' && req.auth.token.organizationId
+            ? String(req.auth.token.organizationId)
+            : null;
+        return { mode: 'firebase_claims', uid: req.auth.uid, unitId, organizationId };
+    }
+}
 exports.startShift = (0, https_1.onCall)(async (req) => {
-    requireFirebaseAuth(req);
-    requireFirebaseRole(req, ['RESPONDER_UNIT']);
+    const authz = await resolveResponderOpsAuth(req);
     const { primaryOfficerId, secondaryOfficerId } = req.data || {};
+    if (authz.mode === 'context') {
+        const unitId = String(authz.context.unitId || '');
+        if (!unitId) {
+            throw new https_1.HttpsError('failed-precondition', 'No responder unit bound to membership');
+        }
+        const shiftRef = db.collection('shifts').doc();
+        const shift = {
+            id: shiftRef.id,
+            organizationId: authz.context.organizationId,
+            siteId: authz.context.siteId || null,
+            responderUnitId: unitId,
+            primaryOfficerId: String(primaryOfficerId || authz.context.userId || ''),
+            secondaryOfficerId: secondaryOfficerId || null,
+            active: true,
+            startedAt: now(),
+            authProvider: authz.context.authProvider,
+            membershipId: authz.context.membershipId,
+        };
+        await shiftRef.set(shift);
+        return { shift, unit: { id: unitId, organizationId: authz.context.organizationId } };
+    }
     const shiftRef = db.collection('shifts').doc();
     const shift = {
         id: shiftRef.id,
-        responderUnitId: String(req.auth.token.unitId || ''),
+        organizationId: authz.organizationId,
+        responderUnitId: authz.unitId,
         primaryOfficerId: String(primaryOfficerId || ''),
         secondaryOfficerId: secondaryOfficerId || null,
         active: true,
         startedAt: now(),
+        authProvider: 'firebase',
     };
     await shiftRef.set(shift);
-    return { shift, unit: { id: String(req.auth.token.unitId || '') } };
+    return { shift, unit: { id: authz.unitId, organizationId: authz.organizationId } };
 });
 exports.endShift = (0, https_1.onCall)(async (req) => {
-    requireFirebaseAuth(req);
-    requireFirebaseRole(req, ['RESPONDER_UNIT']);
-    const q = await db
-        .collection('shifts')
-        .where('responderUnitId', '==', String(req.auth.token.unitId || ''))
-        .where('active', '==', true)
-        .limit(1)
-        .get();
-    if (!q.empty) {
-        await q.docs[0].ref.set({ active: false, endedAt: now() }, { merge: true });
+    const authz = await resolveResponderOpsAuth(req);
+    const unitId = authz.mode === 'context' ? String(authz.context.unitId || '') : authz.unitId;
+    const organizationId = authz.mode === 'context' ? authz.context.organizationId : authz.organizationId;
+    if (!unitId) {
+        throw new https_1.HttpsError('failed-precondition', 'No responder unit bound');
     }
-    return { ok: true };
+    let target = organizationId
+        ? await db
+            .collection('shifts')
+            .where('organizationId', '==', organizationId)
+            .where('responderUnitId', '==', unitId)
+            .where('active', '==', true)
+            .limit(1)
+            .get()
+        : null;
+    if (!target || target.empty) {
+        target = await db
+            .collection('shifts')
+            .where('responderUnitId', '==', unitId)
+            .where('active', '==', true)
+            .limit(1)
+            .get();
+    }
+    if (!target.empty) {
+        const doc = target.docs[0];
+        const data = doc.data();
+        if (organizationId &&
+            data.organizationId &&
+            data.organizationId !== organizationId) {
+            throw new https_1.HttpsError('permission-denied', 'Shift belongs to another organization');
+        }
+        await doc.ref.set({
+            active: false,
+            endedAt: now(),
+            ...(organizationId ? { organizationId } : {}),
+            authProvider: authz.mode === 'context' ? authz.context.authProvider : 'firebase',
+        }, { merge: true });
+    }
+    return { ok: true, organizationId };
 });
 exports.unitHeartbeat = (0, https_1.onCall)(async (req) => {
-    requireFirebaseAuth(req);
-    requireFirebaseRole(req, ['RESPONDER_UNIT']);
+    const authz = await resolveResponderOpsAuth(req);
     const { unitCode, status, location } = req.data || {};
     if (!unitCode || !status)
         throw new https_1.HttpsError('invalid-argument', 'unitCode and status required');
-    await (0, firebaseApps_1.getRtdb)().ref(`liveUnits/${unitCode}`).set({
+    const boundUnit = authz.mode === 'context' ? String(authz.context.unitId || '') : authz.unitId;
+    if (boundUnit && String(unitCode) !== boundUnit) {
+        throw new https_1.HttpsError('permission-denied', 'unitCode does not match bound responder unit');
+    }
+    const organizationId = authz.mode === 'context' ? authz.context.organizationId : authz.organizationId;
+    await (0, firebaseApps_1.getRtdb)().ref(`liveUnits/${String(unitCode)}`).set({
         lat: location?.latitude ?? null,
         lng: location?.longitude ?? null,
         status,
         lastSeenAt: now(),
-        uid: req.auth.uid,
+        uid: authz.mode === 'context' ? (0, tenantIncidentService_1.actorUid)(authz.context) : authz.uid,
+        organizationId: organizationId || null,
+        membershipId: authz.mode === 'context' ? authz.context.membershipId : null,
+        authProvider: authz.mode === 'context' ? authz.context.authProvider : 'firebase',
     });
-    return { ok: true };
+    return { ok: true, organizationId };
 });
 exports.health = (0, https_1.onCall)(async () => ({
     ok: true,

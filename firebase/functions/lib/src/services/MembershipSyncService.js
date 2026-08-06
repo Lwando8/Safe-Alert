@@ -15,30 +15,29 @@ const db = (0, firebaseApps_1.getDb)();
  * Failures must not leave partially trusted memberships (no write without site).
  */
 class MembershipSyncService {
-    static async syncMembership(clerkMembershipId, options) {
-        if (!clerkMembershipId) {
-            throw new Error('Missing membership id');
-        }
+    /**
+     * Accept either a Clerk membership id (string) or a full membership payload.
+     * Prefer payloads from webhooks / list APIs — Backend SDK v4 has no get-by-membership-id.
+     */
+    static async syncMembership(input, options) {
+        const normalized = typeof input === 'string'
+            ? await this.resolveMembershipById(input, options?.clerkOrganizationId)
+            : this.normalizeMembershipPayload(input);
+        const { clerkMembershipId, clerkOrganizationId, organizationId: orgSlug, organizationName, userId, clerkRole, } = normalized;
         console.log('Syncing membership:', clerkMembershipId);
-        const clerkMembership = await clerk.organizationMemberships.getOrganizationMembership({
-            organizationMembershipId: clerkMembershipId,
+        // Ensure org + default site exist before membership write (fail closed otherwise)
+        await this.ensureOrganizationAndDefaultSite({
+            clerkOrganizationId,
+            organizationId: orgSlug,
+            name: organizationName || orgSlug,
         });
-        const { organization, publicUserData } = clerkMembership;
-        const clerkRole = clerkMembership.role;
-        if (!publicUserData?.userId) {
-            throw new Error('Membership has no user data');
-        }
-        if (!organization?.id) {
-            throw new Error('Membership has no organization');
-        }
         const kind = (0, membershipMapping_1.mapRoleToKind)(clerkRole);
         const permissions = (0, membershipMapping_1.derivePermissions)(clerkRole, kind);
-        const orgSlug = String(organization.slug || organization.id);
         (0, membershipMapping_1.assertMembershipPayload)({
             clerkMembershipId,
-            clerkOrganizationId: organization.id,
+            clerkOrganizationId,
             organizationId: orgSlug,
-            userId: publicUserData.userId,
+            userId,
         });
         const existingSnap = await db
             .collection('memberships')
@@ -47,10 +46,10 @@ class MembershipSyncService {
             .get();
         const membershipData = {
             clerkMembershipId,
-            clerkOrganizationId: organization.id,
+            clerkOrganizationId,
             // Preserve tenant id from org slug; never trust client overrides
             organizationId: orgSlug,
-            userId: publicUserData.userId,
+            userId,
             kind,
             status: 'active',
             clerkRole,
@@ -91,6 +90,54 @@ class MembershipSyncService {
         });
         console.log('Updated membership:', existing.id);
         return existing.id;
+    }
+    static normalizeMembershipPayload(raw) {
+        const clerkMembershipId = String(raw.id || '');
+        const organization = raw.organization || {};
+        const clerkOrganizationId = String(organization.id || '');
+        const organizationId = String(organization.slug || organization.id || '');
+        const organizationName = String(organization.name || organizationId);
+        const userId = String(raw.publicUserData?.userId || raw.public_user_data?.user_id || '');
+        const clerkRole = String(raw.role || 'org:member');
+        if (!clerkMembershipId)
+            throw new Error('Missing membership id');
+        if (!clerkOrganizationId)
+            throw new Error('Membership has no organization');
+        if (!userId)
+            throw new Error('Membership has no user data');
+        if (!organizationId)
+            throw new Error('Membership organization missing slug/id');
+        return {
+            clerkMembershipId,
+            clerkOrganizationId,
+            organizationId,
+            organizationName,
+            userId,
+            clerkRole,
+        };
+    }
+    /**
+     * Resolve membership by id via organization membership list.
+     * Requires clerkOrganizationId when the Backend SDK cannot get-by-id.
+     */
+    static async resolveMembershipById(clerkMembershipId, clerkOrganizationId) {
+        if (!clerkMembershipId)
+            throw new Error('Missing membership id');
+        if (!clerkOrganizationId) {
+            throw new Error('clerkOrganizationId required to resolve membership by id (Clerk Backend SDK has no get-by-membership-id)');
+        }
+        const membershipsResult = await clerk.organizations.getOrganizationMembershipList({
+            organizationId: clerkOrganizationId,
+            limit: 500,
+        });
+        const membershipList = Array.isArray(membershipsResult)
+            ? membershipsResult
+            : membershipsResult?.data || [];
+        const found = membershipList.find((m) => m?.id === clerkMembershipId);
+        if (!found) {
+            throw new Error(`Membership not found in organization: ${clerkMembershipId}`);
+        }
+        return this.normalizeMembershipPayload(found);
     }
     static async revokeMembership(clerkMembershipId) {
         if (!clerkMembershipId) {
@@ -200,11 +247,12 @@ class MembershipSyncService {
         let syncCount = 0;
         for (const membership of membershipList) {
             try {
-                await this.syncMembership(membership.id);
+                // Pass full payload — Backend SDK has no get-by-membership-id
+                await this.syncMembership(membership, { forceActive: true });
                 syncCount++;
             }
             catch (err) {
-                console.error('Failed to sync membership:', membership.id, err);
+                console.error('Failed to sync membership:', membership?.id, err);
             }
         }
         console.log(`Synced ${syncCount} memberships for org`);
