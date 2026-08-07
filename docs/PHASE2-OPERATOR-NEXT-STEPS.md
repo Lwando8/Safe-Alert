@@ -25,6 +25,7 @@ Local IDE preview / port-forward is **non-blocking**. Focus here.
 | Vercel Root Directory=`apps/web` | **Dashboard still required**; root ignoreCommand kept |
 | Mobile Clerk cutover / remove Firebase fallback | Deferred (removal gate) |
 | `/platform/organizations` provisioning (D) | Deferred |
+| User onboarding (invite vs create-org) | Documented + Clerk force-create disabled — `PHASE2-USER-ONBOARDING.md` |
 
 ## Operator remaining
 

@@ -9,10 +9,11 @@ export default function SignUpPage() {
             Join Seren SOS
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            University safety platform
+            Create your account, then wait for a university membership invite
+            from your campus admin. Signing up does not create a new university.
           </p>
         </div>
-        
+
         <SignUp
           appearance={{
             elements: {

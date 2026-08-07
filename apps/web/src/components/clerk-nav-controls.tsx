@@ -51,7 +51,6 @@ export function ClerkNavControls({
           <OrganizationSwitcher
             hidePersonal={variant === 'university'}
             afterSelectOrganizationUrl="/ops"
-            afterCreateOrganizationUrl="/ops"
             appearance={{
               elements: {
                 rootBox: 'flex-1',
