@@ -135,6 +135,7 @@ service cloud.firestore {
     }
 
     // Default deny anything else (zones, responders, audit, …)
+    // persons / incidentAccessGrants / auditEvents covered by default deny
     match /{document=**} {
       allow read, write: if false;
     }

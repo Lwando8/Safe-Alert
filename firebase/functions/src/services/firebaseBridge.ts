@@ -73,6 +73,13 @@ export async function issueFirebaseBridgeToken(input: {
       firebaseUid,
     });
 
+    try {
+      const { ensurePersonForClerkUser } = await import('./personService');
+      await ensurePersonForClerkUser({ clerkUserId });
+    } catch (err) {
+      console.error('ensurePersonForClerkUser failed (non-fatal)', err);
+    }
+
     const customToken = await auth.createCustomToken(firebaseUid, {
       bridge: 'clerk_link',
       organizationId: input.context.organizationId,

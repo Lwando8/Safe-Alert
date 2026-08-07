@@ -70,3 +70,11 @@ Clerk mobile prep remains **off** by default (`PHASE2G-MOBILE-CLERK-PREP.md`).
 - Full tenant provisioning UI
 - SOS Express → callable cutover (separate gate)
 - Setting `ALLOW_FIREBASE_AUTH_FALLBACK=false` before device Clerk gate
+
+## Related: hybrid architecture
+
+Person-first identity + entitlement foundations:
+[`HYBRID_ARCHITECTURE_AUDIT.md`](./HYBRID_ARCHITECTURE_AUDIT.md) and
+[`HYBRID_PHASE_B.md`](./HYBRID_PHASE_B.md).
+Phase B adds additive `Person` / `Entitlement` / `IncidentAccessGrant` seams without
+rewriting SOS Express or merging maintenance into emergency incidents.

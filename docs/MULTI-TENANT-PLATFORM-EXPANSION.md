@@ -65,3 +65,4 @@ See also operator follow-ups: [`PLATFORM-EXPANSION-FOLLOWUPS.md`](./PLATFORM-EXP
 | FCM for ops/community/broadcast | `notifyOrgEvent` → `sendEachForMulticast` |
 | Module-gated ops nav + terminology | University layout |
 | Access control / SOS cutover / ERP | **Deferred** |
+| Hybrid person-first architecture | See [`HYBRID_ARCHITECTURE_AUDIT.md`](./HYBRID_ARCHITECTURE_AUDIT.md) |

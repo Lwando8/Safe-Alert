@@ -6,6 +6,9 @@
 
 export * from './tenantConfig';
 export * from './collections';
+export * from './personIdentity';
+export * from './entitlements';
+export * from './accessGrants';
 export {
   type TenantProfile,
   type PlatformModule,
@@ -30,6 +33,38 @@ export {
   buildOrganizationTenantDefaults,
 } from './tenantConfig';
 export { COLLECTIONS, type CollectionName } from './collections';
+export {
+  type Person,
+  type PersonStatus,
+  type IdentityAccount,
+  type IdentityProvider,
+  personIdFromClerkUserId,
+  clerkUserIdFromPersonId,
+  clerkIdentityAccountId,
+  firebaseIdentityAccountId,
+  identityAccountsFromLink,
+  buildPersonRecord,
+} from './personIdentity';
+export {
+  type Entitlement,
+  type EntitlementSource,
+  type EntitlementStatus,
+  resolvePersonEntitlements,
+  personHasModuleEntitlement,
+} from './entitlements';
+export {
+  type IncidentAccessGrant,
+  type IncidentAccessPermission,
+  type ConsentGrant,
+  type ConsentPurpose,
+  type ConsentDataCategory,
+  INCIDENT_ACCESS_GRACE_MS,
+  isIncidentAccessGrantActive,
+  grantAllowsPermission,
+  buildAcceptIncidentAccessGrant,
+  isConsentGrantActive,
+  WORK_STATUS_VOCABULARY,
+} from './accessGrants';
 
 import type {
   ModuleFlags,
@@ -126,7 +161,13 @@ export interface Membership {
   id: string;
   organizationId: string;
   siteId?: string | null;
+  /**
+   * Auth-linked user id. On the migrated Clerk path this equals personId
+   * (compat: personId === clerkUserId). Prefer personId when writing new code.
+   */
   userId: string;
+  /** Hybrid person id — defaults to userId when omitted (compat). */
+  personId?: string;
   kind: MembershipKind;
   status: MembershipStatus;
   permissions?: string[];
@@ -177,16 +218,47 @@ export interface Responder {
   zoneIds?: string[];
   teamId?: string | null;
   userId: string;
+  /** Hybrid person id — defaults to userId when omitted (compat). */
+  personId?: string;
   membershipId: string;
   unitCode: string;
-  /** Org-scoped type (e.g. campus_security). Not public police/EMS product enums. */
+  /**
+   * Org-scoped type. Prefer SECURITY / MEDICAL / MAINTENANCE / FACILITIES / …
+   * Legacy values like campus_security remain valid.
+   */
   responderType: string;
+  /** Capability tags that gate assignment eligibility (additive). */
+  capabilities?: string[];
   approvalStatus: ResponderApprovalStatus;
   employmentStatus: EmploymentStatus;
   deviceBindingRequired?: boolean;
   createdAt: number;
   updatedAt: number;
 }
+
+/** Canonical responder type vocabulary (non-breaking; strings remain open). */
+export const RESPONDER_TYPES = [
+  'SECURITY',
+  'POLICE',
+  'MEDICAL',
+  'FIRE',
+  'MAINTENANCE',
+  'FACILITIES',
+  'IT',
+  'OTHER',
+  'campus_security',
+] as const;
+
+export type ResponderCapability =
+  | 'INCIDENT_RESPONSE'
+  | 'PATROL'
+  | 'ACCESS_CONTROL'
+  | 'PLUMBING'
+  | 'ELECTRICAL'
+  | 'GENERAL_MAINTENANCE'
+  | 'IT_SUPPORT'
+  | 'CLEANING'
+  | string;
 
 export type IncidentMapStatus = 'unassigned' | 'dispatched' | 'resolved';
 
@@ -458,12 +530,32 @@ export interface AuditEvent {
   organizationId?: string | null;
   siteId?: string | null;
   actorUserId: string;
+  /** Hybrid person id of actor when known */
+  actorPersonId?: string | null;
   action: string;
   resourceType: string;
   resourceId: string;
   timestamp: number;
+  previousState?: Record<string, unknown> | null;
+  newState?: Record<string, unknown> | null;
+  reason?: string | null;
+  accessGrantId?: string | null;
   metadata?: Record<string, unknown>;
 }
+
+/** Canonical work-management audit actions */
+export const WORK_AUDIT_ACTIONS = [
+  'report_created',
+  'priority_changed',
+  'work_assigned',
+  'work_reassigned',
+  'work_accepted',
+  'work_declined',
+  'work_started',
+  'work_blocked',
+  'work_resolved',
+  'work_closed',
+] as const;
 
 export type IntegrationProviderKind =
   | 'police'

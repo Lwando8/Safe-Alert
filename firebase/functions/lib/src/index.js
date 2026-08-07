@@ -276,7 +276,8 @@ exports.listOrgIncidents = (0, https_1.onCall)(async (req) => {
 });
 exports.acceptIncident = (0, https_1.onCall)(async (req) => {
     const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
-    (0, requestContext_1.authorizeAnyPermission)(context, ['incidents:acknowledge', 'incidents:update']);
+    const { authorizeAction } = await Promise.resolve().then(() => __importStar(require('./policy/authorizeAction')));
+    await authorizeAction(context, 'accept_incident');
     const { incidentId } = req.data || {};
     if (!incidentId)
         throw new https_1.HttpsError('invalid-argument', 'incidentId required');
@@ -305,6 +306,37 @@ exports.acceptIncident = (0, https_1.onCall)(async (req) => {
         authProvider: context.authProvider,
         timestamp: now(),
     });
+    // Additive IncidentAccessGrant — survives later membership revocation for active response
+    try {
+        const { buildAcceptIncidentAccessGrant } = await Promise.resolve().then(() => __importStar(require('./services/accessGrants')));
+        const { COLLECTIONS } = await Promise.resolve().then(() => __importStar(require('./services/collections')));
+        const grant = buildAcceptIncidentAccessGrant({
+            incidentId: String(incidentId),
+            subjectPersonId: String(data.userId || ''),
+            granteeOrganisationId: context.organizationId,
+            granteePersonId: context.userId,
+            granteeResponderId: unitId,
+            sourceMembershipId: context.membershipId,
+            now: now(),
+            incidentResolved: String(data.status || '') === 'resolved',
+        });
+        await db.doc(`${COLLECTIONS.incidentAccessGrants}/${grant.id}`).set(grant, { merge: true });
+        const { recordAuditEvent } = await Promise.resolve().then(() => __importStar(require('./audit/recordAuditEvent')));
+        await recordAuditEvent({
+            organizationId: context.organizationId,
+            siteId: data.siteId || context.siteId || null,
+            actorUserId: context.userId,
+            actorPersonId: context.userId,
+            action: 'incident_accepted',
+            resourceType: 'incident',
+            resourceId: String(incidentId),
+            accessGrantId: grant.id,
+            newState: { mapStatus: 'dispatched' },
+        });
+    }
+    catch (err) {
+        console.error('acceptIncident grant/audit failed (non-fatal)', err);
+    }
     return { ok: true, assignments };
 });
 exports.updateIncidentStatus = (0, https_1.onCall)(async (req) => {

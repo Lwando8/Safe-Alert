@@ -8,6 +8,10 @@ export const COLLECTIONS = {
   zones: 'zones',
   memberships: 'memberships',
   identityLinks: 'identityLinks',
+  /** Additive person registry — personId compat = Clerk userId */
+  persons: 'persons',
+  incidentAccessGrants: 'incidentAccessGrants',
+  auditEvents: 'auditEvents',
   teams: 'teams',
   incidents: 'incidents',
   responderUnits: 'responderUnits',

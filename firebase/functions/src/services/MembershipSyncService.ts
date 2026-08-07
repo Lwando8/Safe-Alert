@@ -22,6 +22,8 @@ interface Membership {
   clerkOrganizationId: string;
   organizationId: string;
   userId: string;
+  /** Compat: equals userId (Clerk) */
+  personId?: string;
   siteId: string;
   zoneIds?: string[];
   kind: MembershipKind;
@@ -37,6 +39,7 @@ interface Membership {
 interface ResponderProfile {
   unitCode?: string;
   responderType?: string;
+  capabilities?: string[];
   approvalStatus?: 'pending' | 'approved' | 'rejected' | 'revoked';
   employmentStatus?: 'active' | 'inactive';
   deviceBindingRequired?: boolean;
@@ -115,6 +118,14 @@ export class MembershipSyncService {
       userId,
     });
 
+    // Additive Person registry — personId compat === Clerk userId
+    try {
+      const { ensurePersonForClerkUser } = await import('./personService');
+      await ensurePersonForClerkUser({ clerkUserId: userId });
+    } catch (err) {
+      console.error('ensurePersonForClerkUser failed (non-fatal)', err);
+    }
+
     const existingSnap = await db
       .collection('memberships')
       .where('clerkMembershipId', '==', clerkMembershipId)
@@ -127,6 +138,7 @@ export class MembershipSyncService {
       // Preserve tenant id from org slug; never trust client overrides
       organizationId: orgSlug,
       userId,
+      personId: userId,
       kind,
       status: 'active',
       clerkRole,

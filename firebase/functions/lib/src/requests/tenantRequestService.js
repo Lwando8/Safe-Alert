@@ -11,7 +11,9 @@ const moduleGate_1 = require("../services/moduleGate");
 const collections_1 = require("../services/collections");
 const firebaseApps_1 = require("../firebaseApps");
 const recordAnalyticsEvent_1 = require("../analytics/recordAnalyticsEvent");
+const recordAuditEvent_1 = require("../audit/recordAuditEvent");
 const orgNotifications_1 = require("../notifications/orgNotifications");
+const authorizeAction_1 = require("../policy/authorizeAction");
 const db = (0, firebaseApps_1.getDb)();
 const ALLOWED_TRANSITIONS = {
     submitted: ['acknowledged', 'assigned', 'closed'],
@@ -51,6 +53,8 @@ async function loadRequestInTenant(requestId, context) {
 async function createOperationalRequest(context, input) {
     (0, requestContext_1.authorize)(context, { permission: 'requests:create' });
     await (0, moduleGate_1.assertModuleEnabled)(context.organizationId, 'OPERATIONS');
+    // Named policy seam (additive — same checks as above)
+    await (0, authorizeAction_1.authorizeAction)(context, 'create_request');
     if (!input.category || !input.title || !input.description) {
         throw new https_1.HttpsError('invalid-argument', 'category, title, and description are required');
     }
@@ -99,6 +103,16 @@ async function createOperationalRequest(context, input) {
         category: request.category,
         resourceType: 'operationalRequest',
         resourceId: ref.id,
+    });
+    await (0, recordAuditEvent_1.recordAuditEvent)({
+        organizationId: context.organizationId,
+        siteId: context.siteId,
+        actorUserId: context.userId,
+        actorPersonId: context.userId,
+        action: 'report_created',
+        resourceType: 'operationalRequest',
+        resourceId: ref.id,
+        newState: { status: 'submitted', category: request.category },
     });
     await (0, orgNotifications_1.notifyOrgEvent)({
         organizationId: context.organizationId,
@@ -190,6 +204,17 @@ async function updateOperationalRequestStatus(context, input) {
             resourceId: ref.id,
             durationMs: typeof data.createdAt === 'number' ? now - data.createdAt : null,
         });
+        await (0, recordAuditEvent_1.recordAuditEvent)({
+            organizationId: context.organizationId,
+            siteId: data.siteId || null,
+            actorUserId: context.userId,
+            actorPersonId: context.userId,
+            action: 'work_resolved',
+            resourceType: 'operationalRequest',
+            resourceId: ref.id,
+            previousState: { status: current },
+            newState: { status: next },
+        });
         await (0, orgNotifications_1.notifyOrgEvent)({
             organizationId: context.organizationId,
             kind: 'ops_request_resolved',
@@ -200,6 +225,17 @@ async function updateOperationalRequestStatus(context, input) {
         });
     }
     else {
+        await (0, recordAuditEvent_1.recordAuditEvent)({
+            organizationId: context.organizationId,
+            siteId: data.siteId || null,
+            actorUserId: context.userId,
+            actorPersonId: context.userId,
+            action: next === 'closed' ? 'work_closed' : 'work_started',
+            resourceType: 'operationalRequest',
+            resourceId: ref.id,
+            previousState: { status: current },
+            newState: { status: next },
+        });
         await (0, orgNotifications_1.notifyOrgEvent)({
             organizationId: context.organizationId,
             kind: 'ops_request_status',
@@ -217,6 +253,7 @@ async function updateOperationalRequestStatus(context, input) {
 async function assignOperationalRequest(context, input) {
     (0, requestContext_1.authorize)(context, { permission: 'requests:assign' });
     await (0, moduleGate_1.assertModuleEnabled)(context.organizationId, 'OPERATIONS');
+    await (0, authorizeAction_1.authorizeAction)(context, 'assign_request');
     const { ref, data } = await loadRequestInTenant(String(input.requestId), context);
     const current = String(data.status || '');
     if (!['submitted', 'acknowledged', 'assigned', 'on_hold', 'awaiting_information'].includes(current)) {
@@ -271,6 +308,21 @@ async function assignOperationalRequest(context, input) {
         teamId: workOrder.assignedTeamId || null,
         resourceType: 'operationalRequest',
         resourceId: ref.id,
+    });
+    await (0, recordAuditEvent_1.recordAuditEvent)({
+        organizationId: context.organizationId,
+        siteId: data.siteId || null,
+        actorUserId: context.userId,
+        actorPersonId: context.userId,
+        action: 'work_assigned',
+        resourceType: 'operationalRequest',
+        resourceId: ref.id,
+        previousState: { status: current },
+        newState: {
+            status: 'assigned',
+            assignedUserId: workOrder.assignedUserId,
+            workOrderId: workRef.id,
+        },
     });
     await (0, orgNotifications_1.notifyOrgEvent)({
         organizationId: context.organizationId,
