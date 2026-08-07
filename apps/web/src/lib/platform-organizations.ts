@@ -1,6 +1,12 @@
 import 'server-only';
 import { getAdminDb } from './firebase-admin';
 import { assertPlatformAdminSession } from './ops-session';
+import {
+  applyTenantProfilePack,
+  isTenantProfile,
+  type ModuleFlags,
+  type TenantProfile,
+} from '@seren/domain';
 
 export type PlatformOrgSummary = {
   id: string;
@@ -126,30 +132,55 @@ export async function updatePlatformOrganization(input: {
         ? (data.settings as Record<string, unknown>)
         : {};
 
-    const patch: Record<string, unknown> = { updatedAt: Date.now() };
+    const previousProfile: TenantProfile = isTenantProfile(data.tenantProfile)
+      ? data.tenantProfile
+      : 'UNIVERSITY';
+    let tenantProfile = previousProfile;
     if (input.tenantProfile) {
-      if (!allowedProfiles.has(input.tenantProfile)) {
+      if (!allowedProfiles.has(input.tenantProfile) || !isTenantProfile(input.tenantProfile)) {
         return { ok: false, code: 'invalid', message: 'Invalid tenantProfile.' };
       }
-      patch.tenantProfile = input.tenantProfile;
+      tenantProfile = input.tenantProfile;
     }
+    const profileChanged = tenantProfile !== previousProfile;
 
-    const nextSettings: Record<string, unknown> = { ...existingSettings };
+    const modulesOverride: Partial<ModuleFlags> = {};
     if (input.modules) {
-      const modules: Record<string, boolean> = {
-        ...((existingSettings.modules as Record<string, boolean>) || {}),
-      };
       for (const [key, value] of Object.entries(input.modules)) {
         if (!allowedModules.has(key) || typeof value !== 'boolean') {
           return { ok: false, code: 'invalid', message: `Invalid module: ${key}` };
         }
-        modules[key] = value;
+        modulesOverride[key as keyof ModuleFlags] = value;
       }
-      nextSettings.modules = modules;
     }
-    patch.settings = nextSettings;
 
-    await ref.set(patch, { merge: true });
+    const packed = applyTenantProfilePack({
+      profile: tenantProfile,
+      restampDefaults: profileChanged,
+      existingSettings: {
+        modules: (existingSettings.modules as Partial<ModuleFlags>) || null,
+        terminology: (existingSettings.terminology as never) || null,
+        operationalCategories: (existingSettings.operationalCategories as never) || null,
+        communityAlertCategories:
+          (existingSettings.communityAlertCategories as never) || null,
+      },
+      modulesOverride: Object.keys(modulesOverride).length ? modulesOverride : null,
+    });
+
+    await ref.set(
+      {
+        tenantProfile,
+        settings: {
+          ...existingSettings,
+          modules: packed.modules,
+          terminology: packed.terminology,
+          operationalCategories: packed.operationalCategories,
+          communityAlertCategories: packed.communityAlertCategories,
+        },
+        updatedAt: Date.now(),
+      },
+      { merge: true }
+    );
     return { ok: true, organizationId: input.organizationId };
   } catch (err) {
     console.error('updatePlatformOrganization failed', err);

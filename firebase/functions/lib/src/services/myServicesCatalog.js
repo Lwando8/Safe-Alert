@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MY_SERVICE_DEFINITIONS = void 0;
 exports.buildMyServicesCatalog = buildMyServicesCatalog;
+exports.relabelMyServices = relabelMyServices;
 const entitlements_1 = require("./entitlements");
 exports.MY_SERVICE_DEFINITIONS = [
     {
@@ -27,6 +28,14 @@ exports.MY_SERVICE_DEFINITIONS = [
         description: 'View facilities requests you submitted.',
         route: 'my_requests',
         icon: 'list',
+    },
+    {
+        id: 'svc_ride_safety',
+        moduleId: 'RIDE_SAFETY',
+        title: 'Ride safety',
+        description: 'Request a safe walk / ride escort (module foundation).',
+        route: 'ride_safety',
+        icon: 'car',
     },
     {
         id: 'svc_community',
@@ -87,4 +96,26 @@ function buildMyServicesCatalog(input) {
         });
     }
     return items;
+}
+function relabelMyServices(services, terminology) {
+    if (!terminology)
+        return services;
+    const requestLabel = terminology.request || 'Request';
+    return services.map(s => {
+        if (s.route === 'report_issue') {
+            return {
+                ...s,
+                title: `Report a ${requestLabel.toLowerCase()}`,
+                description: `Submit a ${requestLabel.toLowerCase()} to your ${terminology.organization || 'organisation'}.`,
+            };
+        }
+        if (s.route === 'my_requests') {
+            return {
+                ...s,
+                title: `My ${requestLabel.toLowerCase()}s`,
+                description: `View ${requestLabel.toLowerCase()}s you submitted.`,
+            };
+        }
+        return s;
+    });
 }

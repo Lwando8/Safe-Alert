@@ -4,9 +4,15 @@
 import type { RequestContext } from '../middleware/requestContext';
 import { loadOrgTenantConfig } from './moduleGate';
 import { resolvePersonEntitlements } from './entitlements';
-import { buildMyServicesCatalog, type MyServiceItem } from './myServicesCatalog';
-import { resolveTerminology } from './tenantConfig';
+import {
+  buildMyServicesCatalog,
+  relabelMyServices,
+  type MyServiceItem,
+} from './myServicesCatalog';
+import { resolveTerminology, type TerminologyPack } from './tenantConfig';
 import { ensurePersonForClerkUser } from './personService';
+import { getDb } from '../firebaseApps';
+import { COLLECTIONS } from './collections';
 
 export type MyServicesPayload = {
   personId: string;
@@ -37,6 +43,16 @@ export async function getMyServicesForContext(
   }
 
   const cfg = await loadOrgTenantConfig(context.organizationId);
+
+  let terminologyOverrides: Partial<TerminologyPack> | null = null;
+  try {
+    const snap = await getDb().doc(`${COLLECTIONS.organizations}/${context.organizationId}`).get();
+    const settings = (snap.data()?.settings || {}) as { terminology?: Partial<TerminologyPack> };
+    terminologyOverrides = settings.terminology || null;
+  } catch {
+    terminologyOverrides = null;
+  }
+
   const entitlements = resolvePersonEntitlements({
     personId: context.userId,
     tenantProfile: cfg.tenantProfile,
@@ -48,12 +64,15 @@ export async function getMyServicesForContext(
     platformModules: { SAFETY: true },
   });
 
-  const terminology = resolveTerminology(cfg.tenantProfile);
-  const services = buildMyServicesCatalog({
-    entitlements,
-    organisationId: context.organizationId,
-    entitledOnly: true,
-  });
+  const terminology = resolveTerminology(cfg.tenantProfile, terminologyOverrides);
+  const services = relabelMyServices(
+    buildMyServicesCatalog({
+      entitlements,
+      organisationId: context.organizationId,
+      entitledOnly: true,
+    }),
+    terminology
+  );
 
   return {
     personId: context.userId,

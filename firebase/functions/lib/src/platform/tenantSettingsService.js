@@ -53,15 +53,17 @@ async function updateOrganizationTenantSettings(context, input) {
     const existingSettings = data.settings && typeof data.settings === 'object'
         ? data.settings
         : {};
-    let tenantProfile = (0, tenantConfig_1.isTenantProfile)(data.tenantProfile)
+    const previousProfile = (0, tenantConfig_1.isTenantProfile)(data.tenantProfile)
         ? data.tenantProfile
         : 'UNIVERSITY';
+    let tenantProfile = previousProfile;
     if (input.tenantProfile !== undefined) {
         if (!(0, tenantConfig_1.isTenantProfile)(input.tenantProfile)) {
             throw new https_1.HttpsError('invalid-argument', 'Invalid tenantProfile');
         }
         tenantProfile = input.tenantProfile;
     }
+    const profileChanged = tenantProfile !== previousProfile;
     const modulesPatch = {};
     if (input.modules && typeof input.modules === 'object') {
         for (const key of tenantConfig_1.PLATFORM_MODULES) {
@@ -72,28 +74,33 @@ async function updateOrganizationTenantSettings(context, input) {
                 throw new https_1.HttpsError('invalid-argument', `Invalid module flag: ${key}`);
             }
         }
-        // Validate keys aren't inventing modules
         for (const key of Object.keys(input.modules)) {
             if (!(0, tenantConfig_1.isPlatformModule)(key)) {
                 throw new https_1.HttpsError('invalid-argument', `Unknown module: ${key}`);
             }
         }
     }
+    const packed = (0, tenantConfig_1.applyTenantProfilePack)({
+        profile: tenantProfile,
+        restampDefaults: profileChanged,
+        existingSettings: {
+            modules: existingSettings.modules || null,
+            terminology: existingSettings.terminology || null,
+            operationalCategories: existingSettings.operationalCategories || null,
+            communityAlertCategories: existingSettings.communityAlertCategories || null,
+        },
+        modulesOverride: Object.keys(modulesPatch).length ? modulesPatch : null,
+        terminologyOverride: input.terminology || null,
+        operationalCategoriesOverride: input.operationalCategories || null,
+        communityAlertCategoriesOverride: input.communityAlertCategories || null,
+    });
     const nextSettings = {
         ...existingSettings,
-        modules: {
-            ...(existingSettings.modules || {}),
-            ...modulesPatch,
-        },
+        modules: packed.modules,
+        terminology: packed.terminology,
+        operationalCategories: packed.operationalCategories,
+        communityAlertCategories: packed.communityAlertCategories,
     };
-    if (input.terminology)
-        nextSettings.terminology = input.terminology;
-    if (input.operationalCategories) {
-        nextSettings.operationalCategories = input.operationalCategories;
-    }
-    if (input.communityAlertCategories) {
-        nextSettings.communityAlertCategories = input.communityAlertCategories;
-    }
     await ref.set({
         tenantProfile,
         settings: nextSettings,

@@ -211,3 +211,17 @@ export async function listBroadcastsMobile() {
 export async function getMyServicesMobile() {
   return callTenantCallable('getMyServicesCallable', {});
 }
+
+/** Phase G — ride safety foundation */
+export async function createRideSafetyRequestMobile(input: {
+  pickupLabel?: string | null;
+  destinationLabel?: string | null;
+  notes?: string | null;
+  escortRequested?: boolean;
+}) {
+  return callTenantCallable('createRideSafetyRequestCallable', input);
+}
+
+export async function listMyRideSafetyRequestsMobile() {
+  return callTenantCallable('listRideSafetyRequestsCallable', { ownOnly: true });
+}

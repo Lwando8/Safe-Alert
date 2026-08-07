@@ -6,6 +6,8 @@ const entitlements_1 = require("./entitlements");
 const myServicesCatalog_1 = require("./myServicesCatalog");
 const tenantConfig_1 = require("./tenantConfig");
 const personService_1 = require("./personService");
+const firebaseApps_1 = require("../firebaseApps");
+const collections_1 = require("./collections");
 async function getMyServicesForContext(context) {
     try {
         await (0, personService_1.ensurePersonForClerkUser)({ clerkUserId: context.userId });
@@ -14,6 +16,15 @@ async function getMyServicesForContext(context) {
         console.error('ensurePersonForClerkUser on getMyServices failed (non-fatal)', err);
     }
     const cfg = await (0, moduleGate_1.loadOrgTenantConfig)(context.organizationId);
+    let terminologyOverrides = null;
+    try {
+        const snap = await (0, firebaseApps_1.getDb)().doc(`${collections_1.COLLECTIONS.organizations}/${context.organizationId}`).get();
+        const settings = (snap.data()?.settings || {});
+        terminologyOverrides = settings.terminology || null;
+    }
+    catch {
+        terminologyOverrides = null;
+    }
     const entitlements = (0, entitlements_1.resolvePersonEntitlements)({
         personId: context.userId,
         tenantProfile: cfg.tenantProfile,
@@ -24,12 +35,12 @@ async function getMyServicesForContext(context) {
         },
         platformModules: { SAFETY: true },
     });
-    const terminology = (0, tenantConfig_1.resolveTerminology)(cfg.tenantProfile);
-    const services = (0, myServicesCatalog_1.buildMyServicesCatalog)({
+    const terminology = (0, tenantConfig_1.resolveTerminology)(cfg.tenantProfile, terminologyOverrides);
+    const services = (0, myServicesCatalog_1.relabelMyServices)((0, myServicesCatalog_1.buildMyServicesCatalog)({
         entitlements,
         organisationId: context.organizationId,
         entitledOnly: true,
-    });
+    }), terminology);
     return {
         personId: context.userId,
         organizationId: context.organizationId,

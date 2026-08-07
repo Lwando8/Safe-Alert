@@ -12,6 +12,7 @@ export * from './accessGrants';
 export * from './responderCapabilities';
 export * from './sla';
 export * from './myServices';
+export * from './rideSafety';
 export {
   type TenantProfile,
   type PlatformModule,
@@ -474,6 +475,7 @@ export type AnalyticsEventKind =
   | 'community_alert_created'
   | 'community_alert_resolved'
   | 'broadcast_published'
+  | 'ride_safety_requested'
   | 'sla_missed'
   | 'sla_met';
 

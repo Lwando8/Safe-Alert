@@ -205,7 +205,7 @@ Already present as **separate** collections:
 | **D** | Responder capabilities enforcement | **Done** — see [`HYBRID_PHASE_D.md`](./HYBRID_PHASE_D.md) |
 | **E** | Maintenance UX deepen (SLA, team picker) | **Done** — see [`HYBRID_PHASE_E.md`](./HYBRID_PHASE_E.md) |
 | **F** | My Services person-first nav | **Done** — see [`HYBRID_PHASE_F.md`](./HYBRID_PHASE_F.md) |
-| **G** | Additional verticals | Later |
+| **G** | Additional verticals | **Done** — see [`HYBRID_PHASE_G.md`](./HYBRID_PHASE_G.md) |
 | **H** | Marketplace / billing | Later |
 
 ---

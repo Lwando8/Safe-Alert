@@ -23,6 +23,8 @@ export const COLLECTIONS = {
   communityAlerts: 'communityAlerts',
   broadcasts: 'broadcasts',
   analyticsEvents: 'analyticsEvents',
+  /** Phase G — ride safety escort / companion requests (foundation) */
+  rideSafetyRequests: 'rideSafetyRequests',
   orgDevices: 'orgDevices',
   webhookReceipts: 'webhookReceipts',
 } as const;

@@ -18,6 +18,7 @@ exports.resolveTerminology = resolveTerminology;
 exports.resolveOperationalCategories = resolveOperationalCategories;
 exports.resolveCommunityAlertCategories = resolveCommunityAlertCategories;
 exports.buildOrganizationTenantDefaults = buildOrganizationTenantDefaults;
+exports.applyTenantProfilePack = applyTenantProfilePack;
 exports.TENANT_PROFILES = [
     'UNIVERSITY',
     'RESIDENTIAL',
@@ -217,5 +218,40 @@ function buildOrganizationTenantDefaults(profile = 'UNIVERSITY') {
             communityAlertCategories: defaultCommunityAlertCategories(profile),
             terminology: defaultTerminologyForProfile(profile),
         },
+    };
+}
+/**
+ * Phase G — apply profile pack when vertical changes.
+ */
+function applyTenantProfilePack(input) {
+    const pack = buildOrganizationTenantDefaults(input.profile).settings;
+    const restamp = input.restampDefaults === true;
+    const modules = resolveEffectiveModules(input.profile, restamp
+        ? input.modulesOverride || null
+        : {
+            ...(input.existingSettings?.modules || {}),
+            ...(input.modulesOverride || {}),
+        });
+    const terminology = resolveTerminology(input.profile, restamp
+        ? input.terminologyOverride || null
+        : {
+            ...(input.existingSettings?.terminology || {}),
+            ...(input.terminologyOverride || {}),
+        });
+    const operationalCategories = input.operationalCategoriesOverride?.length
+        ? input.operationalCategoriesOverride.map(c => ({ ...c }))
+        : restamp || !input.existingSettings?.operationalCategories?.length
+            ? pack.operationalCategories
+            : input.existingSettings.operationalCategories.map(c => ({ ...c }));
+    const communityAlertCategories = input.communityAlertCategoriesOverride?.length
+        ? input.communityAlertCategoriesOverride.map(c => ({ ...c }))
+        : restamp || !input.existingSettings?.communityAlertCategories?.length
+            ? pack.communityAlertCategories
+            : input.existingSettings.communityAlertCategories.map(c => ({ ...c }));
+    return {
+        modules,
+        terminology,
+        operationalCategories,
+        communityAlertCategories,
     };
 }

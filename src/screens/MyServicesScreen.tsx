@@ -7,6 +7,7 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -120,6 +121,12 @@ export default function MyServicesScreen() {
       case 'broadcasts':
         tabNav?.navigate?.('Community');
         break;
+      case 'ride_safety':
+        Alert.alert(
+          'Ride safety',
+          'Escort requests are available when RIDE_SAFETY is enabled for your organisation. Full matching UX is coming later — this is not emergency SOS.'
+        );
+        break;
       default:
         break;
     }
@@ -135,6 +142,7 @@ export default function MyServicesScreen() {
       'people-circle': 'people-circle',
       calendar: 'calendar',
       megaphone: 'megaphone',
+      car: 'car',
     };
     return map[name] || 'apps';
   }

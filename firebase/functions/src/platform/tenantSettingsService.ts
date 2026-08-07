@@ -4,6 +4,7 @@ import { authorize } from '../middleware/requestContext';
 import { getDb } from '../firebaseApps';
 import { COLLECTIONS } from '../services/collections';
 import {
+  applyTenantProfilePack,
   buildOrganizationTenantDefaults,
   isPlatformModule,
   isTenantProfile,
@@ -80,15 +81,17 @@ export async function updateOrganizationTenantSettings(
       ? (data.settings as Record<string, unknown>)
       : {};
 
-  let tenantProfile: TenantProfile = isTenantProfile(data.tenantProfile)
+  const previousProfile: TenantProfile = isTenantProfile(data.tenantProfile)
     ? data.tenantProfile
     : 'UNIVERSITY';
+  let tenantProfile: TenantProfile = previousProfile;
   if (input.tenantProfile !== undefined) {
     if (!isTenantProfile(input.tenantProfile)) {
       throw new HttpsError('invalid-argument', 'Invalid tenantProfile');
     }
     tenantProfile = input.tenantProfile;
   }
+  const profileChanged = tenantProfile !== previousProfile;
 
   const modulesPatch: Partial<ModuleFlags> = {};
   if (input.modules && typeof input.modules === 'object') {
@@ -99,7 +102,6 @@ export async function updateOrganizationTenantSettings(
         throw new HttpsError('invalid-argument', `Invalid module flag: ${key}`);
       }
     }
-    // Validate keys aren't inventing modules
     for (const key of Object.keys(input.modules)) {
       if (!isPlatformModule(key)) {
         throw new HttpsError('invalid-argument', `Unknown module: ${key}`);
@@ -107,20 +109,31 @@ export async function updateOrganizationTenantSettings(
     }
   }
 
+  const packed = applyTenantProfilePack({
+    profile: tenantProfile,
+    restampDefaults: profileChanged,
+    existingSettings: {
+      modules: (existingSettings.modules as Partial<ModuleFlags>) || null,
+      terminology: (existingSettings.terminology as Record<string, string>) || null,
+      operationalCategories:
+        (existingSettings.operationalCategories as never[]) || null,
+      communityAlertCategories:
+        (existingSettings.communityAlertCategories as never[]) || null,
+    },
+    modulesOverride: Object.keys(modulesPatch).length ? modulesPatch : null,
+    terminologyOverride: input.terminology || null,
+    operationalCategoriesOverride: (input.operationalCategories as never[]) || null,
+    communityAlertCategoriesOverride:
+      (input.communityAlertCategories as never[]) || null,
+  });
+
   const nextSettings: Record<string, unknown> = {
     ...existingSettings,
-    modules: {
-      ...((existingSettings.modules as object) || {}),
-      ...modulesPatch,
-    },
+    modules: packed.modules,
+    terminology: packed.terminology,
+    operationalCategories: packed.operationalCategories,
+    communityAlertCategories: packed.communityAlertCategories,
   };
-  if (input.terminology) nextSettings.terminology = input.terminology;
-  if (input.operationalCategories) {
-    nextSettings.operationalCategories = input.operationalCategories;
-  }
-  if (input.communityAlertCategories) {
-    nextSettings.communityAlertCategories = input.communityAlertCategories;
-  }
 
   await ref.set(
     {

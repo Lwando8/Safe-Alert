@@ -21,6 +21,7 @@ export const COLLECTIONS = {
   communityAlerts: 'communityAlerts',
   broadcasts: 'broadcasts',
   analyticsEvents: 'analyticsEvents',
+  rideSafetyRequests: 'rideSafetyRequests',
   orgDevices: 'orgDevices',
   webhookReceipts: 'webhookReceipts',
 } as const;

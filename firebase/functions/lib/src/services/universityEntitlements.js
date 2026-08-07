@@ -43,4 +43,5 @@ exports.UNIVERSITY_MODULE_MAP = {
     community: 'COMMUNITY',
     broadcasts: 'BROADCASTS',
     analytics: 'ANALYTICS',
+    ride_safety: 'RIDE_SAFETY',
 };

@@ -71,3 +71,4 @@ See also operator follow-ups: [`PLATFORM-EXPANSION-FOLLOWUPS.md`](./PLATFORM-EXP
 | Hybrid Phase D responder capabilities | [`HYBRID_PHASE_D.md`](./HYBRID_PHASE_D.md) |
 | Hybrid Phase E SLA + team picker | [`HYBRID_PHASE_E.md`](./HYBRID_PHASE_E.md) |
 | Hybrid Phase F My Services nav | [`HYBRID_PHASE_F.md`](./HYBRID_PHASE_F.md) |
+| Hybrid Phase G additional verticals | [`HYBRID_PHASE_G.md`](./HYBRID_PHASE_G.md) |

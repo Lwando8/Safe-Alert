@@ -47,4 +47,4 @@ npm test --prefix firebase/functions
 
 ## Next
 
-Phase G — additional verticals (later).
+Phase G — **Done** — see [`HYBRID_PHASE_G.md`](./HYBRID_PHASE_G.md) (non-university packs + RIDE_SAFETY foundation).

@@ -14,7 +14,8 @@ export type MyServiceRouteKey =
   | 'report_issue'
   | 'my_requests'
   | 'community_hub'
-  | 'broadcasts';
+  | 'broadcasts'
+  | 'ride_safety';
 
 export interface MyServiceDefinition {
   id: string;
@@ -56,6 +57,14 @@ export const MY_SERVICE_DEFINITIONS: MyServiceDefinition[] = [
     description: 'View facilities requests you submitted.',
     route: 'my_requests',
     icon: 'list',
+  },
+  {
+    id: 'svc_ride_safety',
+    moduleId: 'RIDE_SAFETY',
+    title: 'Ride safety',
+    description: 'Request a safe walk / ride escort (module foundation).',
+    route: 'ride_safety',
+    icon: 'car',
   },
   {
     id: 'svc_community',
@@ -129,4 +138,32 @@ export function buildMyServicesCatalog(input: {
   }
 
   return items;
+}
+
+/** Relabel ops-facing copy using organisation terminology pack. */
+export function relabelMyServices(
+  services: MyServiceItem[],
+  terminology?: { request?: string; organization?: string; member?: string } | null
+): MyServiceItem[] {
+  if (!terminology) return services;
+  const requestLabel = terminology.request || 'Request';
+  return services.map(s => {
+    if (s.route === 'report_issue') {
+      return {
+        ...s,
+        title: `Report a ${requestLabel.toLowerCase()}`,
+        description: `Submit a ${requestLabel.toLowerCase()} to your ${
+          terminology.organization || 'organisation'
+        }.`,
+      };
+    }
+    if (s.route === 'my_requests') {
+      return {
+        ...s,
+        title: `My ${requestLabel.toLowerCase()}s`,
+        description: `View ${requestLabel.toLowerCase()}s you submitted.`,
+      };
+    }
+    return s;
+  });
 }

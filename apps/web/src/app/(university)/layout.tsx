@@ -31,6 +31,7 @@ export default async function UniversityLayout({
       show: m.COMMUNITY || m.GROUPS || m.EVENTS || m.COMMUNITY_ALERTS,
     },
     { href: "/ops/broadcasts", label: "Broadcasts", show: m.BROADCASTS },
+    { href: "/ops/ride-safety", label: "Ride safety", show: m.RIDE_SAFETY },
     { href: "/ops/analytics", label: "Analytics", show: m.ANALYTICS },
     { href: "/ops/settings", label: "Roles & settings", show: true },
   ].filter(item => item.show);

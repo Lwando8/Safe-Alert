@@ -7,5 +7,6 @@ export type AnalyticsEventKind =
   | 'community_alert_created'
   | 'community_alert_resolved'
   | 'broadcast_published'
+  | 'ride_safety_requested'
   | 'sla_missed'
   | 'sla_met';

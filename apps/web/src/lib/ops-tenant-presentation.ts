@@ -1,18 +1,15 @@
 import 'server-only';
 import { getAdminDb } from './firebase-admin';
 import { resolveOpsSession } from './ops-session';
+import {
+  isTenantProfile,
+  resolveEffectiveModules,
+  resolveTerminology,
+  type ModuleFlags,
+  type TenantProfile,
+} from '@seren/domain';
 
-export type OpsModuleFlags = {
-  SAFETY: boolean;
-  OPERATIONS: boolean;
-  COMMUNITY: boolean;
-  GROUPS: boolean;
-  EVENTS: boolean;
-  COMMUNITY_ALERTS: boolean;
-  RIDE_SAFETY: boolean;
-  BROADCASTS: boolean;
-  ANALYTICS: boolean;
-};
+export type OpsModuleFlags = ModuleFlags;
 
 export type OpsTerminology = {
   organization: string;
@@ -24,31 +21,9 @@ export type OpsTerminology = {
   request: string;
 };
 
-const DEFAULT_MODULES: OpsModuleFlags = {
-  SAFETY: true,
-  OPERATIONS: true,
-  COMMUNITY: true,
-  GROUPS: true,
-  EVENTS: true,
-  COMMUNITY_ALERTS: true,
-  RIDE_SAFETY: true,
-  BROADCASTS: true,
-  ANALYTICS: true,
-};
-
-const DEFAULT_TERMINOLOGY: OpsTerminology = {
-  organization: 'University',
-  site: 'Campus',
-  zone: 'Zone',
-  member: 'Member',
-  responder: 'Responder',
-  incident: 'Incident',
-  request: 'Request',
-};
-
 /**
  * Load effective modules + terminology for the active ops org.
- * Fail open to university defaults when org doc missing fields (additive migration).
+ * Phase G: profile-aware defaults (RESIDENTIAL hides RIDE_SAFETY unless overridden).
  */
 export async function loadOpsTenantPresentation(): Promise<{
   organizationId: string | null;
@@ -56,11 +31,12 @@ export async function loadOpsTenantPresentation(): Promise<{
   terminology: OpsTerminology;
   tenantProfile: string;
 }> {
+  const fallbackProfile: TenantProfile = 'UNIVERSITY';
   const fallback = {
     organizationId: null as string | null,
-    modules: DEFAULT_MODULES,
-    terminology: DEFAULT_TERMINOLOGY,
-    tenantProfile: 'UNIVERSITY',
+    modules: resolveEffectiveModules(fallbackProfile, null),
+    terminology: resolveTerminology(fallbackProfile, null),
+    tenantProfile: fallbackProfile,
   };
 
   const session = await resolveOpsSession();
@@ -76,14 +52,14 @@ export async function loadOpsTenantPresentation(): Promise<{
         terminology?: Partial<OpsTerminology>;
       };
     };
+    const profile = isTenantProfile(data.tenantProfile)
+      ? data.tenantProfile
+      : 'UNIVERSITY';
     return {
       organizationId: session.organizationId,
-      tenantProfile: data.tenantProfile || 'UNIVERSITY',
-      modules: { ...DEFAULT_MODULES, ...(data.settings?.modules || {}) },
-      terminology: {
-        ...DEFAULT_TERMINOLOGY,
-        ...(data.settings?.terminology || {}),
-      },
+      tenantProfile: profile,
+      modules: resolveEffectiveModules(profile, data.settings?.modules || null),
+      terminology: resolveTerminology(profile, data.settings?.terminology || null),
     };
   } catch {
     return { ...fallback, organizationId: session.organizationId };

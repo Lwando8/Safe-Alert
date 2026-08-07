@@ -1011,6 +1011,23 @@ export const getMyServicesCallable = onCall(async req => {
   return getMyServicesForContext(context);
 });
 
+/** Phase G — ride safety foundation (create/list; no matching engine). */
+export const createRideSafetyRequestCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  const { createRideSafetyRequest } = await import('./services/rideSafetyService');
+  return createRideSafetyRequest(context, req.data || {});
+});
+
+export const listRideSafetyRequestsCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  const { listRideSafetyRequests } = await import('./services/rideSafetyService');
+  return listRideSafetyRequests(context, {
+    ownOnly: req.data?.ownOnly === true,
+    limit: req.data?.limit,
+    status: typeof req.data?.status === 'string' ? req.data.status : undefined,
+  });
+});
+
 /**
  * Mobile / dual-auth bridge: mint Firebase custom token for expansion callables.
  * Does not change Express SOS login. Clerk session or existing Firebase auth required
