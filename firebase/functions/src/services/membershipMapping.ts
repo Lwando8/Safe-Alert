@@ -8,9 +8,39 @@ export type MembershipKind =
   | 'contractor'
   | 'security_guard'
   | 'control_room'
-  | 'org_admin';
+  | 'org_admin'
+  | 'facilities'
+  | 'resident'
+  | 'other';
 
 export type MembershipStatus = 'invited' | 'active' | 'suspended' | 'revoked';
+
+const REQUEST_PERMS_FULL = [
+  'requests:create',
+  'requests:read-own',
+  'requests:read-all',
+  'requests:assign',
+  'requests:update',
+  'requests:resolve',
+] as const;
+
+const COMMUNITY_PERMS_MEMBER = [
+  'community:read',
+  'community:alerts:create',
+  'community:alerts:read',
+  'groups:read',
+  'groups:join',
+  'events:read',
+] as const;
+
+const COMMUNITY_PERMS_ADMIN = [
+  ...COMMUNITY_PERMS_MEMBER,
+  'community:alerts:moderate',
+  'groups:manage',
+  'events:manage',
+  'broadcasts:create',
+  'broadcasts:read',
+] as const;
 
 export function mapRoleToKind(clerkRole: string): MembershipKind {
   const roleMap: Record<string, MembershipKind> = {
@@ -19,6 +49,8 @@ export function mapRoleToKind(clerkRole: string): MembershipKind {
     'org:responder': 'security_guard',
     'org:staff': 'staff',
     'org:student': 'student',
+    'org:facilities': 'facilities',
+    'org:resident': 'resident',
   };
 
   return roleMap[clerkRole] || 'student';
@@ -42,6 +74,10 @@ export function derivePermissions(clerkRole: string, _kind?: MembershipKind): st
       'analytics:read',
       'audit:read',
       'organization:manage',
+      ...REQUEST_PERMS_FULL,
+      ...COMMUNITY_PERMS_ADMIN,
+      'teams:read',
+      'teams:manage',
     ],
     'org:supervisor': [
       'incidents:create',
@@ -55,6 +91,9 @@ export function derivePermissions(clerkRole: string, _kind?: MembershipKind): st
       'sites:read',
       'analytics:read',
       'audit:read',
+      ...REQUEST_PERMS_FULL,
+      ...COMMUNITY_PERMS_ADMIN,
+      'teams:read',
     ],
     'org:responder': [
       'incidents:read-all',
@@ -62,12 +101,58 @@ export function derivePermissions(clerkRole: string, _kind?: MembershipKind): st
       'incidents:update',
       'responders:read',
       'sites:read',
+      'requests:read-all',
+      'requests:update',
+      'requests:resolve',
+      'community:read',
+      'community:alerts:read',
+      'teams:read',
     ],
-    'org:staff': ['incidents:create', 'incidents:read-own', 'sites:read'],
-    'org:student': ['incidents:create', 'incidents:read-own', 'sites:read'],
+    'org:facilities': [
+      'sites:read',
+      'requests:create',
+      'requests:read-own',
+      'requests:read-all',
+      'requests:assign',
+      'requests:update',
+      'requests:resolve',
+      'teams:read',
+    ],
+    'org:staff': [
+      'incidents:create',
+      'incidents:read-own',
+      'sites:read',
+      'requests:create',
+      'requests:read-own',
+      ...COMMUNITY_PERMS_MEMBER,
+    ],
+    'org:student': [
+      'incidents:create',
+      'incidents:read-own',
+      'sites:read',
+      'requests:create',
+      'requests:read-own',
+      ...COMMUNITY_PERMS_MEMBER,
+    ],
+    'org:resident': [
+      'incidents:create',
+      'incidents:read-own',
+      'sites:read',
+      'requests:create',
+      'requests:read-own',
+      ...COMMUNITY_PERMS_MEMBER,
+    ],
   };
 
-  return permissionMap[clerkRole] || ['incidents:create', 'incidents:read-own'];
+  return (
+    permissionMap[clerkRole] || [
+      'incidents:create',
+      'incidents:read-own',
+      'requests:create',
+      'requests:read-own',
+      ...COMMUNITY_PERMS_MEMBER,
+    ]
+  );
 }
 
 export function assertMembershipPayload(fields: {

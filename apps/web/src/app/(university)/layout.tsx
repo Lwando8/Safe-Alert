@@ -4,8 +4,10 @@ import { OpsTenantBoundary } from "@/components/ops-tenant-boundary";
 const navItems = [
   { href: "/ops", label: "Command overview" },
   { href: "/ops/incidents", label: "Incidents" },
+  { href: "/ops/requests", label: "Facilities requests" },
   { href: "/ops/responders", label: "Responders" },
   { href: "/ops/campus", label: "Campus & zones" },
+  { href: "/ops/community", label: "Community" },
   { href: "/ops/broadcasts", label: "Broadcasts" },
   { href: "/ops/analytics", label: "Analytics" },
   { href: "/ops/settings", label: "Roles & settings" },

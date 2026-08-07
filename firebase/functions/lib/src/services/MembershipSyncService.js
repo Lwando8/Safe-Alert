@@ -7,6 +7,7 @@ Object.defineProperty(exports, "assertMembershipPayload", { enumerable: true, ge
 Object.defineProperty(exports, "derivePermissions", { enumerable: true, get: function () { return membershipMapping_1.derivePermissions; } });
 Object.defineProperty(exports, "mapRoleToKind", { enumerable: true, get: function () { return membershipMapping_1.mapRoleToKind; } });
 const firebaseApps_1 = require("../firebaseApps");
+const tenantConfig_1 = require("./tenantConfig");
 // Clerk SDK typings lag runtime org membership APIs used here.
 const clerk = (0, clerk_sdk_node_1.Clerk)({ secretKey: process.env.CLERK_SECRET_KEY });
 const db = (0, firebaseApps_1.getDb)();
@@ -202,14 +203,40 @@ class MembershipSyncService {
             throw new Error('organization id and slug are required');
         }
         const now = Date.now();
-        await db.doc(`organizations/${organizationId}`).set({
+        const orgRef = db.doc(`organizations/${organizationId}`);
+        const existingOrg = await orgRef.get();
+        const existingData = existingOrg.exists
+            ? existingOrg.data()
+            : undefined;
+        const existingSettings = existingData?.settings && typeof existingData.settings === 'object'
+            ? existingData.settings
+            : {};
+        const tenantDefaults = (0, tenantConfig_1.buildOrganizationTenantDefaults)('UNIVERSITY');
+        await orgRef.set({
             id: organizationId,
             clerkOrganizationId,
-            name,
+            name: name || existingData?.name || organizationId,
             slug: organizationId,
-            status: 'active',
+            status: existingData?.status || 'active',
+            // Additive tenant profile — preserve existing profile / module overrides.
+            tenantProfile: existingData?.tenantProfile || tenantDefaults.tenantProfile,
+            settings: {
+                ...existingSettings,
+                features: existingSettings.features && typeof existingSettings.features === 'object'
+                    ? existingSettings.features
+                    : {},
+                branding: existingSettings.branding && typeof existingSettings.branding === 'object'
+                    ? existingSettings.branding
+                    : {},
+                modules: existingSettings.modules || tenantDefaults.settings.modules,
+                terminology: existingSettings.terminology || tenantDefaults.settings.terminology,
+                operationalCategories: existingSettings.operationalCategories ||
+                    tenantDefaults.settings.operationalCategories,
+                communityAlertCategories: existingSettings.communityAlertCategories ||
+                    tenantDefaults.settings.communityAlertCategories,
+            },
             updatedAt: now,
-            createdAt: now,
+            ...(existingOrg.exists ? {} : { createdAt: now }),
         }, { merge: true });
         const existingSite = await this.getDefaultSiteId(organizationId);
         if (existingSite)

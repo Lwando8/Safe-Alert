@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.legacyApiProxy = exports.health = exports.unitHeartbeat = exports.endShift = exports.startShift = exports.linkIdentity = exports.bootstrapOrganizationMemberships = exports.onIncidentCreatedNotify = exports.registerPushToken = exports.assignUnitToIncident = exports.updateIncidentStatus = exports.acceptIncident = exports.listOrgIncidents = exports.getNearbyIncidents = exports.appendIncidentLocation = exports.createIncident = exports.loginAdmin = exports.loginResponder = exports.resolveDeviceAccess = exports.registerCitizen = exports.clerkWebhook = void 0;
+exports.listAnalyticsEventsCallable = exports.updateOrgTenantSettings = exports.getOrgTenantSettings = exports.retractBroadcastCallable = exports.listBroadcastsCallable = exports.createBroadcastCallable = exports.listAlertSightingsCallable = exports.addAlertSightingCallable = exports.resolveCommunityAlertCallable = exports.listCommunityAlertsCallable = exports.createCommunityAlertCallable = exports.listCommunityEventsCallable = exports.createCommunityEventCallable = exports.joinCommunityGroupCallable = exports.listCommunityGroupsCallable = exports.createCommunityGroupCallable = exports.assignOperationalRequestCallable = exports.updateOperationalRequestStatusCallable = exports.listOperationalRequestsCallable = exports.createOperationalRequestCallable = exports.legacyApiProxy = exports.health = exports.unitHeartbeat = exports.endShift = exports.startShift = exports.linkIdentity = exports.bootstrapOrganizationMemberships = exports.onIncidentCreatedNotify = exports.registerPushToken = exports.assignUnitToIncident = exports.updateIncidentStatus = exports.acceptIncident = exports.listOrgIncidents = exports.getNearbyIncidents = exports.appendIncidentLocation = exports.createIncident = exports.loginAdmin = exports.loginResponder = exports.resolveDeviceAccess = exports.registerCitizen = exports.clerkWebhook = void 0;
 const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-functions/v2/firestore");
@@ -43,6 +43,10 @@ const IdentityLinkService_1 = require("./services/IdentityLinkService");
 const clerkWebhook_1 = require("./http/clerkWebhook");
 Object.defineProperty(exports, "clerkWebhook", { enumerable: true, get: function () { return clerkWebhook_1.clerkWebhook; } });
 const tenantIncidentService_1 = require("./incidents/tenantIncidentService");
+const tenantRequestService_1 = require("./requests/tenantRequestService");
+const tenantCommunityService_1 = require("./community/tenantCommunityService");
+const tenantBroadcastService_1 = require("./broadcasts/tenantBroadcastService");
+const tenantSettingsService_1 = require("./platform/tenantSettingsService");
 const firebaseApps_1 = require("./firebaseApps");
 const geo_1 = require("./services/geo");
 const firebaseLegacyAdapter_1 = require("./middleware/firebaseLegacyAdapter");
@@ -592,4 +596,129 @@ exports.legacyApiProxy = (0, https_1.onCall)(async (req) => {
     requireFirebaseAuth(req);
     const { path } = req.data || {};
     throw new https_1.HttpsError('unimplemented', `Legacy API route ${String(path || '')} is not available after Firebase migration.`);
+});
+// ---------------------------------------------------------------------------
+// Multi-tenant platform expansion — Operations / Community / Broadcasts / Analytics
+// ---------------------------------------------------------------------------
+exports.createOperationalRequestCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    const { category, title, description, priority, location, locationLabel, attachments, zoneId } = req.data || {};
+    return (0, tenantRequestService_1.createOperationalRequest)(context, {
+        category,
+        title,
+        description,
+        priority,
+        location,
+        locationLabel,
+        attachments,
+        zoneId,
+    });
+});
+exports.listOperationalRequestsCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    const { status, limit, ownOnly } = req.data || {};
+    return (0, tenantRequestService_1.listOperationalRequests)(context, { status, limit, ownOnly: !!ownOnly });
+});
+exports.updateOperationalRequestStatusCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    const { requestId, status, note, resolutionSummary } = req.data || {};
+    return (0, tenantRequestService_1.updateOperationalRequestStatus)(context, {
+        requestId,
+        status,
+        note,
+        resolutionSummary,
+    });
+});
+exports.assignOperationalRequestCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    const { requestId, assignedUserId, assignedTeamId, priority, slaTargetAt, notes } = req.data || {};
+    return (0, tenantRequestService_1.assignOperationalRequest)(context, {
+        requestId,
+        assignedUserId,
+        assignedTeamId,
+        priority,
+        slaTargetAt,
+        notes,
+    });
+});
+exports.createCommunityGroupCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    return (0, tenantCommunityService_1.createCommunityGroup)(context, req.data || {});
+});
+exports.listCommunityGroupsCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    return (0, tenantCommunityService_1.listCommunityGroups)(context, { limit: req.data?.limit });
+});
+exports.joinCommunityGroupCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    return (0, tenantCommunityService_1.joinCommunityGroup)(context, String(req.data?.groupId || ''));
+});
+exports.createCommunityEventCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    return (0, tenantCommunityService_1.createCommunityEvent)(context, req.data || {});
+});
+exports.listCommunityEventsCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    return (0, tenantCommunityService_1.listCommunityEvents)(context, { limit: req.data?.limit });
+});
+exports.createCommunityAlertCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    return (0, tenantCommunityService_1.createCommunityAlert)(context, req.data || {});
+});
+exports.listCommunityAlertsCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    const { status, type, limit } = req.data || {};
+    return (0, tenantCommunityService_1.listCommunityAlerts)(context, { status, type, limit });
+});
+exports.resolveCommunityAlertCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    return (0, tenantCommunityService_1.resolveCommunityAlert)(context, {
+        alertId: String(req.data?.alertId || ''),
+        note: req.data?.note,
+    });
+});
+exports.addAlertSightingCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    return (0, tenantCommunityService_1.addAlertSighting)(context, req.data || {});
+});
+exports.listAlertSightingsCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    return (0, tenantCommunityService_1.listAlertSightings)(context, String(req.data?.alertId || ''));
+});
+exports.createBroadcastCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    return (0, tenantBroadcastService_1.createBroadcast)(context, req.data || {});
+});
+exports.listBroadcastsCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    return (0, tenantBroadcastService_1.listBroadcasts)(context, {
+        status: req.data?.status,
+        limit: req.data?.limit,
+    });
+});
+exports.retractBroadcastCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    return (0, tenantBroadcastService_1.retractBroadcast)(context, String(req.data?.broadcastId || ''));
+});
+exports.getOrgTenantSettings = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req, {
+        disallowFirebaseFallback: true,
+    });
+    return (0, tenantSettingsService_1.getOrganizationTenantSettings)(context, req.data?.organizationId);
+});
+exports.updateOrgTenantSettings = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req, {
+        disallowFirebaseFallback: true,
+    });
+    if (!context.isPlatformOperator) {
+        throw new https_1.HttpsError('permission-denied', 'Platform admin required');
+    }
+    return (0, tenantSettingsService_1.updateOrganizationTenantSettings)(context, req.data || {});
+});
+exports.listAnalyticsEventsCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    return (0, tenantSettingsService_1.listAnalyticsEvents)(context, {
+        limit: req.data?.limit,
+        kind: req.data?.kind,
+    });
 });

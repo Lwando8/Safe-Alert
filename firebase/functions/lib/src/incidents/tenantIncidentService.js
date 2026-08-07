@@ -8,6 +8,7 @@ exports.registerTenantPushToken = registerTenantPushToken;
 const https_1 = require("firebase-functions/v2/https");
 const requestContext_1 = require("../middleware/requestContext");
 const firebaseApps_1 = require("../firebaseApps");
+const recordAnalyticsEvent_1 = require("../analytics/recordAnalyticsEvent");
 const db = (0, firebaseApps_1.getDb)();
 function actorUid(context) {
     return context.firebaseUid || context.userId;
@@ -68,6 +69,14 @@ async function createTenantIncident(context, input) {
         t: now,
         uid: actorUid(context),
         organizationId: context.organizationId,
+    });
+    await (0, recordAnalyticsEvent_1.recordAnalyticsEvent)({
+        organizationId: context.organizationId,
+        siteId: context.siteId,
+        kind: 'incident_created',
+        category: String(input.type),
+        resourceType: 'incident',
+        resourceId: incidentId,
     });
     return incident;
 }

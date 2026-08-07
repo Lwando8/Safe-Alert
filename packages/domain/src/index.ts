@@ -4,6 +4,41 @@
  * Do not hard-code university-only vocabulary into these types.
  */
 
+export * from './tenantConfig';
+export * from './collections';
+export {
+  type TenantProfile,
+  type PlatformModule,
+  type ModuleFlags,
+  type OperationalCategoryDef,
+  type CommunityAlertCategoryDef,
+  type TerminologyPack,
+  type OrganizationModuleSettings,
+  TENANT_PROFILES,
+  PLATFORM_MODULES,
+  isTenantProfile,
+  isPlatformModule,
+  defaultModulesForProfile,
+  defaultTerminologyForProfile,
+  defaultOperationalCategories,
+  defaultCommunityAlertCategories,
+  resolveEffectiveModules,
+  isModuleEnabled,
+  resolveTerminology,
+  resolveOperationalCategories,
+  resolveCommunityAlertCategories,
+  buildOrganizationTenantDefaults,
+} from './tenantConfig';
+export { COLLECTIONS, type CollectionName } from './collections';
+
+import type {
+  ModuleFlags,
+  OperationalCategoryDef,
+  CommunityAlertCategoryDef,
+  TerminologyPack,
+  TenantProfile,
+} from './tenantConfig';
+
 export type EntityStatus = 'active' | 'inactive' | 'suspended' | 'provisioning';
 
 export type OrganizationStatus = 'active' | 'suspended' | 'provisioning';
@@ -13,6 +48,8 @@ export interface Organization {
   name: string;
   slug: string;
   status: OrganizationStatus;
+  /** Tenant profile drives defaults; modules override in settings. */
+  tenantProfile?: TenantProfile;
   settings?: OrganizationSettings;
   createdAt: number;
   updatedAt: number;
@@ -25,7 +62,12 @@ export interface OrganizationSettings {
     primaryColor?: string;
     logoUrl?: string;
   };
+  /** @deprecated Prefer typed `modules` */
   features?: Record<string, boolean>;
+  modules?: Partial<ModuleFlags>;
+  operationalCategories?: OperationalCategoryDef[];
+  communityAlertCategories?: CommunityAlertCategoryDef[];
+  terminology?: Partial<TerminologyPack>;
 }
 
 export interface Site {
@@ -74,6 +116,8 @@ export type MembershipKind =
   | 'security_guard'
   | 'control_room'
   | 'org_admin'
+  | 'facilities'
+  | 'resident'
   | 'other';
 
 export type MembershipStatus = 'invited' | 'active' | 'suspended' | 'revoked';
@@ -86,6 +130,34 @@ export interface Membership {
   kind: MembershipKind;
   status: MembershipStatus;
   permissions?: string[];
+  teamIds?: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type TeamKind =
+  | 'security'
+  | 'medical'
+  | 'fire'
+  | 'facilities'
+  | 'maintenance'
+  | 'electrical'
+  | 'plumbing'
+  | 'cleaning'
+  | 'grounds'
+  | 'it'
+  | 'estate'
+  | 'campus_operations'
+  | 'contractor'
+  | 'other';
+
+export interface Team {
+  id: string;
+  organizationId: string;
+  siteId?: string | null;
+  name: string;
+  kind: TeamKind;
+  status: 'active' | 'inactive';
   createdAt: number;
   updatedAt: number;
 }
@@ -103,6 +175,7 @@ export interface Responder {
   organizationId: string;
   siteId: string;
   zoneIds?: string[];
+  teamId?: string | null;
   userId: string;
   membershipId: string;
   unitCode: string;
@@ -149,6 +222,199 @@ export interface TenantScopedIncident {
   meta?: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
+}
+
+export type OperationalRequestStatus =
+  | 'submitted'
+  | 'acknowledged'
+  | 'assigned'
+  | 'in_progress'
+  | 'awaiting_information'
+  | 'on_hold'
+  | 'resolved'
+  | 'closed';
+
+export type Priority = 'low' | 'normal' | 'high' | 'urgent';
+
+export interface AttachmentMeta {
+  id: string;
+  contentType?: string;
+  storagePath?: string;
+  url?: string;
+  createdAt: number;
+}
+
+export interface OperationalRequest {
+  id: string;
+  organizationId: string;
+  siteId: string;
+  zoneId?: string | null;
+  reporterUserId: string;
+  category: string;
+  title: string;
+  description: string;
+  status: OperationalRequestStatus;
+  priority: Priority;
+  location?: GeoPoint | null;
+  locationLabel?: string | null;
+  attachments?: AttachmentMeta[];
+  assignedTeamId?: string | null;
+  assignedUserId?: string | null;
+  workOrderId?: string | null;
+  createdAt: number;
+  updatedAt: number;
+  acknowledgedAt?: number | null;
+  assignedAt?: number | null;
+  workStartedAt?: number | null;
+  resolvedAt?: number | null;
+  closedAt?: number | null;
+  resolutionSummary?: string | null;
+}
+
+export interface WorkOrder {
+  id: string;
+  organizationId: string;
+  siteId: string;
+  zoneId?: string | null;
+  requestId: string;
+  category: string;
+  assignedTeamId?: string | null;
+  assignedUserId?: string | null;
+  priority: Priority;
+  status: OperationalRequestStatus;
+  slaTargetAt?: number | null;
+  notes?: string | null;
+  attachments?: AttachmentMeta[];
+  resolutionSummary?: string | null;
+  createdAt: number;
+  updatedAt: number;
+  acceptedAt?: number | null;
+  workStartedAt?: number | null;
+  resolvedAt?: number | null;
+}
+
+export type CommunityGroupVisibility = 'members' | 'organization';
+
+export interface CommunityGroup {
+  id: string;
+  organizationId: string;
+  siteId?: string | null;
+  zoneId?: string | null;
+  name: string;
+  description?: string;
+  category: string;
+  visibility: CommunityGroupVisibility;
+  status: 'active' | 'inactive' | 'archived';
+  organiserUserIds: string[];
+  memberUserIds: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CommunityEvent {
+  id: string;
+  organizationId: string;
+  siteId?: string | null;
+  groupId?: string | null;
+  title: string;
+  description?: string;
+  startsAt: number;
+  endsAt?: number | null;
+  locationLabel?: string | null;
+  location?: GeoPoint | null;
+  organiserUserId: string;
+  status: 'scheduled' | 'cancelled' | 'completed';
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type CommunityAlertType =
+  | 'MISSING_PET'
+  | 'FOUND_PET'
+  | 'LOST_PROPERTY'
+  | 'FOUND_PROPERTY'
+  | 'COMMUNITY_ASSISTANCE'
+  | 'NOTICE';
+
+export type CommunityAlertStatus = 'open' | 'resolved' | 'closed';
+
+export interface CommunityAlert {
+  id: string;
+  organizationId: string;
+  siteId?: string | null;
+  zoneId?: string | null;
+  type: CommunityAlertType;
+  status: CommunityAlertStatus;
+  title: string;
+  description: string;
+  reporterUserId: string;
+  /** Public contact preference — never auto-fill email/phone from profile */
+  contactMethod?: string | null;
+  location?: GeoPoint | null;
+  locationLabel?: string | null;
+  attachments?: AttachmentMeta[];
+  /** Missing-pet / property extras */
+  details?: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+  resolvedAt?: number | null;
+}
+
+export interface AlertSighting {
+  id: string;
+  organizationId: string;
+  alertId: string;
+  reporterUserId: string;
+  note: string;
+  seenAt: number;
+  location?: GeoPoint | null;
+  locationLabel?: string | null;
+  attachments?: AttachmentMeta[];
+  createdAt: number;
+}
+
+export type BroadcastSeverity = 'info' | 'warning' | 'emergency';
+
+/** Official organisation broadcast — distinct from CommunityAlert */
+export interface Broadcast {
+  id: string;
+  organizationId: string;
+  siteId?: string | null;
+  title: string;
+  body: string;
+  severity: BroadcastSeverity;
+  createdByUserId: string;
+  status: 'draft' | 'published' | 'retracted';
+  publishedAt?: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type AnalyticsEventKind =
+  | 'incident_created'
+  | 'incident_resolved'
+  | 'request_created'
+  | 'request_assigned'
+  | 'request_resolved'
+  | 'community_alert_created'
+  | 'community_alert_resolved'
+  | 'broadcast_published'
+  | 'sla_missed'
+  | 'sla_met';
+
+export interface AnalyticsEvent {
+  id: string;
+  organizationId: string;
+  siteId?: string | null;
+  zoneId?: string | null;
+  kind: AnalyticsEventKind;
+  category?: string | null;
+  teamId?: string | null;
+  resourceType: string;
+  resourceId: string;
+  durationMs?: number | null;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
 }
 
 export type LocationSessionStatus = 'active' | 'ended';

@@ -7,7 +7,7 @@ import { clearSession, loadStoredSession } from '../services/AuthService';
 import { RootStackParamList } from '../types';
 import { UserRole } from '../types/auth';
 import AuthNavigator from './AuthNavigator';
-import MainNavigator from './MainNavigator';
+import CitizenNavigator from './CitizenNavigator';
 import ResponderNavigator from './ResponderNavigator';
 import AdminNavigator from './AdminNavigator';
 
@@ -69,7 +69,7 @@ export default function RootNavigator() {
           ) : userRole === 'responder' ? (
             <Stack.Screen name="Responder" component={ResponderNavigator} />
           ) : (
-            <Stack.Screen name="Main" component={MainNavigator} />
+            <Stack.Screen name="Main" component={CitizenNavigator} />
           )}
         </Stack.Navigator>
       </NavigationContainer>

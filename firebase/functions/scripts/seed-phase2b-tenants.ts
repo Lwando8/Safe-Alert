@@ -7,6 +7,7 @@
  *   npx ts-node scripts/seed-phase2b-tenants.ts
  */
 import * as admin from 'firebase-admin';
+import { buildOrganizationTenantDefaults } from '../src/services/tenantConfig';
 
 const projectId = process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID || 'demo-seren';
 
@@ -18,6 +19,7 @@ const db = admin.firestore();
 const now = Date.now();
 
 async function ensureOrg(slug: string, clerkOrganizationId: string, name: string) {
+  const defaults = buildOrganizationTenantDefaults('UNIVERSITY');
   await db.doc(`organizations/${slug}`).set(
     {
       id: slug,
@@ -25,6 +27,12 @@ async function ensureOrg(slug: string, clerkOrganizationId: string, name: string
       name,
       slug,
       status: 'active',
+      tenantProfile: defaults.tenantProfile,
+      settings: {
+        features: {},
+        branding: {},
+        ...defaults.settings,
+      },
       createdAt: now,
       updatedAt: now,
     },
@@ -66,6 +74,23 @@ async function run() {
     'incidents:acknowledge',
     'responders:read',
     'sites:read',
+    'requests:create',
+    'requests:read-own',
+    'requests:read-all',
+    'requests:assign',
+    'requests:update',
+    'requests:resolve',
+    'community:read',
+    'community:alerts:create',
+    'community:alerts:read',
+    'community:alerts:moderate',
+    'groups:read',
+    'groups:manage',
+    'events:read',
+    'events:manage',
+    'broadcasts:create',
+    'broadcasts:read',
+    'analytics:read',
   ];
 
   await db.doc('memberships/mem_a_supervisor').set(
@@ -115,7 +140,7 @@ async function run() {
       kind: 'student',
       status: 'active',
       clerkRole: 'org:student',
-      permissions: ['incidents:create', 'incidents:read-own', 'sites:read'],
+      permissions: ['incidents:create', 'incidents:read-own', 'sites:read', 'requests:create', 'requests:read-own', 'community:read', 'community:alerts:create', 'community:alerts:read', 'groups:read', 'groups:join', 'events:read'],
       createdAt: now,
       updatedAt: now,
     },

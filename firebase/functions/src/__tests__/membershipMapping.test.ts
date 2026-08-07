@@ -19,7 +19,16 @@ describe('membershipMapping', () => {
     const perms = derivePermissions('org:supervisor');
     expect(perms).toContain('incidents:read-all');
     expect(perms).toContain('incidents:assign');
+    expect(perms).toContain('requests:assign');
+    expect(perms).toContain('broadcasts:create');
+    expect(perms).toContain('community:alerts:moderate');
     expect(derivePermissions('org:student')).not.toContain('incidents:read-all');
+    expect(derivePermissions('org:student')).toContain('requests:create');
+    expect(derivePermissions('org:student')).toContain('community:alerts:create');
+    expect(derivePermissions('org:facilities')).toContain('requests:assign');
+    expect(derivePermissions('org:facilities')).not.toContain('broadcasts:create');
+    expect(mapRoleToKind('org:facilities')).toBe('facilities');
+    expect(mapRoleToKind('org:resident')).toBe('resident');
   });
 
   it('rejects incomplete membership payloads before write', () => {

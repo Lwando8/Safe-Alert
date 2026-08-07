@@ -45,6 +45,49 @@ service cloud.firestore {
       }
     }
 
+    // Operations requests / work orders — callable / Admin only
+    match /operationalRequests/{requestId} {
+      allow read, write: if false;
+      match /timeline/{eventId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /workOrders/{workOrderId} {
+      allow read, write: if false;
+    }
+
+    match /communityGroups/{groupId} {
+      allow read, write: if false;
+    }
+
+    match /communityEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /communityAlerts/{alertId} {
+      allow read, write: if false;
+      match /sightings/{sightingId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /broadcasts/{broadcastId} {
+      allow read, write: if false;
+    }
+
+    match /analyticsEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /teams/{teamId} {
+      allow read, write: if false;
+    }
+
+    match /notificationOutbox/{id} {
+      allow read, write: if false;
+    }
+
     match /responderUnits/{unitId} {
       allow read, write: if false;
     }

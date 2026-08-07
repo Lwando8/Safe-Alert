@@ -158,6 +158,16 @@ export default function HomeScreen() {
     navigation.navigate('Community' as never);
   };
 
+  const handleReportIssue = () => {
+    // Citizen stack sibling (Tabs → ReportIssue)
+    const parent = navigation.getParent();
+    if (parent) {
+      parent.navigate('ReportIssue' as never);
+    } else {
+      navigation.navigate('ReportIssue' as never);
+    }
+  };
+
   const handleSettings = () => {
     navigation.navigate('Profile' as never);
   };
@@ -385,6 +395,26 @@ export default function HomeScreen() {
                   </View>
                   <Text style={[styles.quickActionBarTitle, { color: theme.text }]}>
                     Community
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.quickActionItem}
+                onPress={handleReportIssue}
+                activeOpacity={0.7}
+              >
+                <View style={styles.quickActionBarItem}>
+                  <View
+                    style={[
+                      styles.quickActionBarIconContainer,
+                      { backgroundColor: theme.surface },
+                    ]}
+                  >
+                    <Ionicons name="construct" size={20} color={theme.primary} />
+                  </View>
+                  <Text style={[styles.quickActionBarTitle, { color: theme.text }]}>
+                    Report Issue
                   </Text>
                 </View>
               </TouchableOpacity>

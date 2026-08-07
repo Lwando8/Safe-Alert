@@ -42,6 +42,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
  *   npx ts-node scripts/seed-phase2b-tenants.ts
  */
 const admin = __importStar(require("firebase-admin"));
+const tenantConfig_1 = require("../src/services/tenantConfig");
 const projectId = process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID || 'demo-seren';
 if (!admin.apps.length) {
     admin.initializeApp({ projectId });
@@ -49,12 +50,19 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 const now = Date.now();
 async function ensureOrg(slug, clerkOrganizationId, name) {
+    const defaults = (0, tenantConfig_1.buildOrganizationTenantDefaults)('UNIVERSITY');
     await db.doc(`organizations/${slug}`).set({
         id: slug,
         clerkOrganizationId,
         name,
         slug,
         status: 'active',
+        tenantProfile: defaults.tenantProfile,
+        settings: {
+            features: {},
+            branding: {},
+            ...defaults.settings,
+        },
         createdAt: now,
         updatedAt: now,
     }, { merge: true });
@@ -90,6 +98,23 @@ async function run() {
         'incidents:acknowledge',
         'responders:read',
         'sites:read',
+        'requests:create',
+        'requests:read-own',
+        'requests:read-all',
+        'requests:assign',
+        'requests:update',
+        'requests:resolve',
+        'community:read',
+        'community:alerts:create',
+        'community:alerts:read',
+        'community:alerts:moderate',
+        'groups:read',
+        'groups:manage',
+        'events:read',
+        'events:manage',
+        'broadcasts:create',
+        'broadcasts:read',
+        'analytics:read',
     ];
     await db.doc('memberships/mem_a_supervisor').set({
         id: 'mem_a_supervisor',
@@ -129,7 +154,7 @@ async function run() {
         kind: 'student',
         status: 'active',
         clerkRole: 'org:student',
-        permissions: ['incidents:create', 'incidents:read-own', 'sites:read'],
+        permissions: ['incidents:create', 'incidents:read-own', 'sites:read', 'requests:create', 'requests:read-own', 'community:read', 'community:alerts:create', 'community:alerts:read', 'groups:read', 'groups:join', 'events:read'],
         createdAt: now,
         updatedAt: now,
     }, { merge: true });

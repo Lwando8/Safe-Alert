@@ -7,6 +7,7 @@ import {
   type MembershipStatus,
 } from './membershipMapping';
 import { getDb } from '../firebaseApps';
+import { buildOrganizationTenantDefaults } from './tenantConfig';
 
 // Clerk SDK typings lag runtime org membership APIs used here.
 const clerk = Clerk({ secretKey: process.env.CLERK_SECRET_KEY }) as any;
@@ -314,16 +315,47 @@ export class MembershipSyncService {
     }
 
     const now = Date.now();
+    const orgRef = db.doc(`organizations/${organizationId}`);
+    const existingOrg = await orgRef.get();
+    const existingData = existingOrg.exists
+      ? (existingOrg.data() as Record<string, unknown>)
+      : undefined;
+    const existingSettings =
+      existingData?.settings && typeof existingData.settings === 'object'
+        ? (existingData.settings as Record<string, unknown>)
+        : {};
+    const tenantDefaults = buildOrganizationTenantDefaults('UNIVERSITY');
 
-    await db.doc(`organizations/${organizationId}`).set(
+    await orgRef.set(
       {
         id: organizationId,
         clerkOrganizationId,
-        name,
+        name: name || (existingData?.name as string) || organizationId,
         slug: organizationId,
-        status: 'active',
+        status: (existingData?.status as string) || 'active',
+        // Additive tenant profile — preserve existing profile / module overrides.
+        tenantProfile: existingData?.tenantProfile || tenantDefaults.tenantProfile,
+        settings: {
+          ...existingSettings,
+          features:
+            existingSettings.features && typeof existingSettings.features === 'object'
+              ? existingSettings.features
+              : {},
+          branding:
+            existingSettings.branding && typeof existingSettings.branding === 'object'
+              ? existingSettings.branding
+              : {},
+          modules: existingSettings.modules || tenantDefaults.settings.modules,
+          terminology: existingSettings.terminology || tenantDefaults.settings.terminology,
+          operationalCategories:
+            existingSettings.operationalCategories ||
+            tenantDefaults.settings.operationalCategories,
+          communityAlertCategories:
+            existingSettings.communityAlertCategories ||
+            tenantDefaults.settings.communityAlertCategories,
+        },
         updatedAt: now,
-        createdAt: now,
+        ...(existingOrg.exists ? {} : { createdAt: now }),
       },
       { merge: true }
     );

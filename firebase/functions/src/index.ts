@@ -18,6 +18,34 @@ import {
   loadIncidentInTenant,
   registerTenantPushToken,
 } from './incidents/tenantIncidentService';
+import {
+  assignOperationalRequest,
+  createOperationalRequest,
+  listOperationalRequests,
+  updateOperationalRequestStatus,
+} from './requests/tenantRequestService';
+import {
+  addAlertSighting,
+  createCommunityAlert,
+  createCommunityEvent,
+  createCommunityGroup,
+  joinCommunityGroup,
+  listAlertSightings,
+  listCommunityAlerts,
+  listCommunityEvents,
+  listCommunityGroups,
+  resolveCommunityAlert,
+} from './community/tenantCommunityService';
+import {
+  createBroadcast,
+  listBroadcasts,
+  retractBroadcast,
+} from './broadcasts/tenantBroadcastService';
+import {
+  getOrganizationTenantSettings,
+  listAnalyticsEvents,
+  updateOrganizationTenantSettings,
+} from './platform/tenantSettingsService';
 import { getAuth, getDb, getRtdb } from './firebaseApps';
 import {
   clampRadiusKm,
@@ -670,4 +698,152 @@ export const legacyApiProxy = onCall(async req => {
     'unimplemented',
     `Legacy API route ${String(path || '')} is not available after Firebase migration.`
   );
+});
+
+// ---------------------------------------------------------------------------
+// Multi-tenant platform expansion — Operations / Community / Broadcasts / Analytics
+// ---------------------------------------------------------------------------
+
+export const createOperationalRequestCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  const { category, title, description, priority, location, locationLabel, attachments, zoneId } =
+    req.data || {};
+  return createOperationalRequest(context, {
+    category,
+    title,
+    description,
+    priority,
+    location,
+    locationLabel,
+    attachments,
+    zoneId,
+  });
+});
+
+export const listOperationalRequestsCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  const { status, limit, ownOnly } = req.data || {};
+  return listOperationalRequests(context, { status, limit, ownOnly: !!ownOnly });
+});
+
+export const updateOperationalRequestStatusCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  const { requestId, status, note, resolutionSummary } = req.data || {};
+  return updateOperationalRequestStatus(context, {
+    requestId,
+    status,
+    note,
+    resolutionSummary,
+  });
+});
+
+export const assignOperationalRequestCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  const { requestId, assignedUserId, assignedTeamId, priority, slaTargetAt, notes } =
+    req.data || {};
+  return assignOperationalRequest(context, {
+    requestId,
+    assignedUserId,
+    assignedTeamId,
+    priority,
+    slaTargetAt,
+    notes,
+  });
+});
+
+export const createCommunityGroupCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  return createCommunityGroup(context, req.data || {});
+});
+
+export const listCommunityGroupsCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  return listCommunityGroups(context, { limit: req.data?.limit });
+});
+
+export const joinCommunityGroupCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  return joinCommunityGroup(context, String(req.data?.groupId || ''));
+});
+
+export const createCommunityEventCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  return createCommunityEvent(context, req.data || {});
+});
+
+export const listCommunityEventsCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  return listCommunityEvents(context, { limit: req.data?.limit });
+});
+
+export const createCommunityAlertCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  return createCommunityAlert(context, req.data || {});
+});
+
+export const listCommunityAlertsCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  const { status, type, limit } = req.data || {};
+  return listCommunityAlerts(context, { status, type, limit });
+});
+
+export const resolveCommunityAlertCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  return resolveCommunityAlert(context, {
+    alertId: String(req.data?.alertId || ''),
+    note: req.data?.note,
+  });
+});
+
+export const addAlertSightingCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  return addAlertSighting(context, req.data || {});
+});
+
+export const listAlertSightingsCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  return listAlertSightings(context, String(req.data?.alertId || ''));
+});
+
+export const createBroadcastCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  return createBroadcast(context, req.data || {});
+});
+
+export const listBroadcastsCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  return listBroadcasts(context, {
+    status: req.data?.status,
+    limit: req.data?.limit,
+  });
+});
+
+export const retractBroadcastCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  return retractBroadcast(context, String(req.data?.broadcastId || ''));
+});
+
+export const getOrgTenantSettings = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req, {
+    disallowFirebaseFallback: true,
+  });
+  return getOrganizationTenantSettings(context, req.data?.organizationId);
+});
+
+export const updateOrgTenantSettings = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req, {
+    disallowFirebaseFallback: true,
+  });
+  if (!context.isPlatformOperator) {
+    throw new HttpsError('permission-denied', 'Platform admin required');
+  }
+  return updateOrganizationTenantSettings(context, req.data || {});
+});
+
+export const listAnalyticsEventsCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  return listAnalyticsEvents(context, {
+    limit: req.data?.limit,
+    kind: req.data?.kind,
+  });
 });

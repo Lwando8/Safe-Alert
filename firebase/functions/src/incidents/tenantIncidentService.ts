@@ -3,6 +3,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import type { RequestContext } from '../middleware/requestContext';
 import { authorize, requireTenantMatch } from '../middleware/requestContext';
 import { getDb, getRtdb } from '../firebaseApps';
+import { recordAnalyticsEvent } from '../analytics/recordAnalyticsEvent';
 
 const db = getDb();
 
@@ -78,6 +79,15 @@ export async function createTenantIncident(
     t: now,
     uid: actorUid(context),
     organizationId: context.organizationId,
+  });
+
+  await recordAnalyticsEvent({
+    organizationId: context.organizationId,
+    siteId: context.siteId,
+    kind: 'incident_created',
+    category: String(input.type),
+    resourceType: 'incident',
+    resourceId: incidentId,
   });
 
   return incident;

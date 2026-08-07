@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { MainTabParamList } from '../types';
 import { useTheme } from '../context/ThemeContext';
 import HomeScreen from '../screens/HomeScreen';
-import MyCommunityScreen from '../screens/MyCommunityScreen';
+import CommunityHubScreen from '../screens/CommunityHubScreen';
 import EmergencyMonitoringScreen from '../screens/EmergencyMonitoringScreen';
 import ContactsScreen from '../screens/ContactsScreen';
 import ProfileNavigator from './ProfileNavigator';
@@ -69,7 +69,7 @@ export default function MainNavigator() {
       <Tab.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
       <Tab.Screen
         name="Community"
-        component={MyCommunityScreen}
+        component={CommunityHubScreen}
         options={{ headerShown: false }}
       />
       <Tab.Screen
