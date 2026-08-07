@@ -42,4 +42,4 @@ npm test --prefix firebase/functions
 
 ## Next
 
-Phase F — My Services person-first nav.
+Phase F — **Done** — see [`HYBRID_PHASE_F.md`](./HYBRID_PHASE_F.md) (person-first My Services hub).

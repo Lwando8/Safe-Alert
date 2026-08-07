@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.issueFirebaseBridgeTokenCallable = exports.listAnalyticsEventsCallable = exports.updateOrgTenantSettings = exports.getOrgTenantSettings = exports.retractBroadcastCallable = exports.listBroadcastsCallable = exports.createBroadcastCallable = exports.listAlertSightingsCallable = exports.addAlertSightingCallable = exports.resolveCommunityAlertCallable = exports.listCommunityAlertsCallable = exports.createCommunityAlertCallable = exports.listCommunityEventsCallable = exports.createCommunityEventCallable = exports.joinCommunityGroupCallable = exports.listCommunityGroupsCallable = exports.createCommunityGroupCallable = exports.assignOperationalRequestCallable = exports.updateOperationalRequestStatusCallable = exports.listOperationalRequestsCallable = exports.createOperationalRequestCallable = exports.legacyApiProxy = exports.health = exports.unitHeartbeat = exports.endShift = exports.startShift = exports.linkIdentity = exports.bootstrapOrganizationMemberships = exports.onIncidentCreatedNotify = exports.registerPushToken = exports.assignUnitToIncident = exports.updateIncidentStatus = exports.acceptIncident = exports.listOrgIncidents = exports.getNearbyIncidents = exports.appendIncidentLocation = exports.createIncident = exports.loginAdmin = exports.loginResponder = exports.resolveDeviceAccess = exports.registerCitizen = exports.clerkWebhook = void 0;
+exports.issueFirebaseBridgeTokenCallable = exports.getMyServicesCallable = exports.listAnalyticsEventsCallable = exports.updateOrgTenantSettings = exports.getOrgTenantSettings = exports.retractBroadcastCallable = exports.listBroadcastsCallable = exports.createBroadcastCallable = exports.listAlertSightingsCallable = exports.addAlertSightingCallable = exports.resolveCommunityAlertCallable = exports.listCommunityAlertsCallable = exports.createCommunityAlertCallable = exports.listCommunityEventsCallable = exports.createCommunityEventCallable = exports.joinCommunityGroupCallable = exports.listCommunityGroupsCallable = exports.createCommunityGroupCallable = exports.assignOperationalRequestCallable = exports.updateOperationalRequestStatusCallable = exports.listOperationalRequestsCallable = exports.createOperationalRequestCallable = exports.legacyApiProxy = exports.health = exports.unitHeartbeat = exports.endShift = exports.startShift = exports.linkIdentity = exports.bootstrapOrganizationMemberships = exports.onIncidentCreatedNotify = exports.registerPushToken = exports.assignUnitToIncident = exports.updateIncidentStatus = exports.acceptIncident = exports.listOrgIncidents = exports.getNearbyIncidents = exports.appendIncidentLocation = exports.createIncident = exports.loginAdmin = exports.loginResponder = exports.resolveDeviceAccess = exports.registerCitizen = exports.clerkWebhook = void 0;
 const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-functions/v2/firestore");
@@ -836,6 +836,15 @@ exports.listAnalyticsEventsCallable = (0, https_1.onCall)(async (req) => {
         limit: req.data?.limit,
         kind: req.data?.kind,
     });
+});
+/**
+ * Phase F — person-first My Services catalog (presentation only).
+ * Does not create SOS incidents; SAFETY routes clients to existing Home.
+ */
+exports.getMyServicesCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    const { getMyServicesForContext } = await Promise.resolve().then(() => __importStar(require('./services/myServices')));
+    return getMyServicesForContext(context);
 });
 /**
  * Mobile / dual-auth bridge: mint Firebase custom token for expansion callables.

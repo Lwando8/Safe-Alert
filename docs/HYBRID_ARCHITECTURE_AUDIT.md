@@ -204,7 +204,7 @@ Already present as **separate** collections:
 | **C** | Map university flows onto hybrid seams without rebuild | **Done** — see [`HYBRID_PHASE_C.md`](./HYBRID_PHASE_C.md) |
 | **D** | Responder capabilities enforcement | **Done** — see [`HYBRID_PHASE_D.md`](./HYBRID_PHASE_D.md) |
 | **E** | Maintenance UX deepen (SLA, team picker) | **Done** — see [`HYBRID_PHASE_E.md`](./HYBRID_PHASE_E.md) |
-| **F** | My Services person-first nav | Later |
+| **F** | My Services person-first nav | **Done** — see [`HYBRID_PHASE_F.md`](./HYBRID_PHASE_F.md) |
 | **G** | Additional verticals | Later |
 | **H** | Marketplace / billing | Later |
 

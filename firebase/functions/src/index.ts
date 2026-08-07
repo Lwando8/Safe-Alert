@@ -1002,6 +1002,16 @@ export const listAnalyticsEventsCallable = onCall(async req => {
 });
 
 /**
+ * Phase F — person-first My Services catalog (presentation only).
+ * Does not create SOS incidents; SAFETY routes clients to existing Home.
+ */
+export const getMyServicesCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  const { getMyServicesForContext } = await import('./services/myServices');
+  return getMyServicesForContext(context);
+});
+
+/**
  * Mobile / dual-auth bridge: mint Firebase custom token for expansion callables.
  * Does not change Express SOS login. Clerk session or existing Firebase auth required
  * (operator mint secret optional for emulator tooling).

@@ -2,6 +2,7 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ProfileStackParamList } from '../types';
 import ProfileScreen from '../screens/ProfileScreen';
+import MyServicesScreen from '../screens/MyServicesScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import MedicalInfoScreen from '../screens/MedicalInfoScreen';
 import EmergencyContactsScreen from '../screens/EmergencyContactsScreen';
@@ -29,6 +30,11 @@ export default function ProfileNavigator() {
         name="ProfileMain"
         component={ProfileScreen}
         options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="MyServices"
+        component={MyServicesScreen}
+        options={{ title: 'My Services', headerShown: true }}
       />
       <Stack.Screen
         name="EditProfile"

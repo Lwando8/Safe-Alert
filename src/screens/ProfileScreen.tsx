@@ -125,6 +125,12 @@ export default function ProfileScreen() {
 
   const profileActions = [
     {
+      title: 'My Services',
+      icon: <Ionicons name="apps" size={22} color={theme.primary} />,
+      color: theme.primaryGlass,
+      onPress: () => navigation.navigate('MyServices' as never),
+    },
+    {
       title: 'Edit Profile',
       icon: <Ionicons name="person" size={22} color={theme.primary} />,
       color: theme.primaryGlass,

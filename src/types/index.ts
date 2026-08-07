@@ -120,6 +120,7 @@ export type AuthStackParamList = {
 
 export type ProfileStackParamList = {
   ProfileMain: undefined;
+  MyServices: undefined;
   EditProfile: undefined;
   MedicalInfo: undefined;
   EmergencyContacts: undefined;

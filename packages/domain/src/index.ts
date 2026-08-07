@@ -11,6 +11,7 @@ export * from './entitlements';
 export * from './accessGrants';
 export * from './responderCapabilities';
 export * from './sla';
+export * from './myServices';
 export {
   type TenantProfile,
   type PlatformModule,

@@ -206,3 +206,8 @@ export async function listCommunityEventsMobile() {
 export async function listBroadcastsMobile() {
   return callTenantCallable('listBroadcastsCallable', {});
 }
+
+/** Phase F — person-first entitled services catalog */
+export async function getMyServicesMobile() {
+  return callTenantCallable('getMyServicesCallable', {});
+}
