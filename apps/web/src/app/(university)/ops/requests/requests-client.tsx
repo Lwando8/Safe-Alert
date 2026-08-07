@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Card,
   CardContent,
@@ -10,7 +10,9 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { useOpsTenantBoundary } from '@/components/ops-tenant-boundary';
+import { slaStatusLabel, type SlaStatus } from '@/lib/ops-sla';
 
 type RequestRow = {
   id: string;
@@ -21,7 +23,16 @@ type RequestRow = {
   priority?: string;
   createdAt?: number;
   assignedUserId?: string | null;
+  assignedTeamId?: string | null;
   workOrderId?: string | null;
+  slaTargetAt?: number | null;
+  slaStatus?: SlaStatus;
+};
+
+type TeamRow = {
+  id: string;
+  name: string;
+  kind?: string;
 };
 
 type Props = {
@@ -29,6 +40,7 @@ type Props = {
     ok: boolean;
     organizationId?: string;
     requests?: RequestRow[];
+    teams?: TeamRow[];
     permissions?: string[];
     code?: string;
     message?: string;
@@ -36,12 +48,29 @@ type Props = {
   clerkEnabled: boolean;
 };
 
-function formatTime(ts?: number) {
+function formatTime(ts?: number | null) {
   if (!ts) return '—';
   try {
     return new Date(ts).toLocaleString();
   } catch {
     return String(ts);
+  }
+}
+
+function slaBadgeVariant(
+  status?: SlaStatus
+): 'default' | 'secondary' | 'destructive' | 'outline' {
+  switch (status) {
+    case 'breached':
+      return 'destructive';
+    case 'due_soon':
+      return 'outline';
+    case 'met':
+      return 'secondary';
+    case 'on_track':
+      return 'default';
+    default:
+      return 'secondary';
   }
 }
 
@@ -54,9 +83,12 @@ const NEXT_STATUS: Record<string, string[]> = {
   resolved: ['closed'],
 };
 
+const PRIORITIES = ['urgent', 'high', 'normal', 'low'] as const;
+
 export function RequestsClient({ initial, clerkEnabled }: Props) {
   const { tenantEpoch } = useOpsTenantBoundary();
   const [rows, setRows] = useState<RequestRow[]>(initial.requests || []);
+  const [teams, setTeams] = useState<TeamRow[]>(initial.teams || []);
   const [organizationId, setOrganizationId] = useState(initial.organizationId || '');
   const [permissions, setPermissions] = useState<string[]>(initial.permissions || []);
   const [error, setError] = useState<string | null>(
@@ -64,12 +96,45 @@ export function RequestsClient({ initial, clerkEnabled }: Props) {
   );
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [assignDraft, setAssignDraft] = useState<
+    Record<string, { teamId: string; priority: string; slaHours: string }>
+  >({});
 
   const canAssign = permissions.includes('requests:assign');
   const canUpdate =
     permissions.includes('requests:update') ||
     permissions.includes('requests:assign') ||
     permissions.includes('requests:resolve');
+
+  const teamNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const t of teams) map.set(t.id, t.name);
+    return map;
+  }, [teams]);
+
+  const draftFor = useCallback(
+    (row: RequestRow) => {
+      return (
+        assignDraft[row.id] || {
+          teamId: row.assignedTeamId || teams[0]?.id || '',
+          priority: row.priority || 'normal',
+          slaHours: '',
+        }
+      );
+    },
+    [assignDraft, teams]
+  );
+
+  const setDraft = (requestId: string, patch: Partial<{ teamId: string; priority: string; slaHours: string }>) => {
+    setAssignDraft(prev => {
+      const base = prev[requestId] || {
+        teamId: teams[0]?.id || '',
+        priority: 'normal',
+        slaHours: '',
+      };
+      return { ...prev, [requestId]: { ...base, ...patch } };
+    });
+  };
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -85,6 +150,7 @@ export function RequestsClient({ initial, clerkEnabled }: Props) {
       setOrganizationId(json.organizationId);
       setPermissions(json.permissions || []);
       setRows(json.requests || []);
+      setTeams(json.teams || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
@@ -139,7 +205,7 @@ export function RequestsClient({ initial, clerkEnabled }: Props) {
           </h1>
           <p className="text-sm text-muted-foreground">
             Operational requests for {organizationId || 'your organization'} —
-            separate from SOS incidents.
+            team assignment + SLA targets (separate from SOS incidents).
           </p>
         </div>
         <Button variant="outline" onClick={refresh} disabled={loading}>
@@ -169,6 +235,16 @@ export function RequestsClient({ initial, clerkEnabled }: Props) {
         <div className="grid gap-3">
           {rows.map(row => {
             const next = NEXT_STATUS[row.status || ''] || [];
+            const draft = draftFor(row);
+            const canShowAssign =
+              canAssign &&
+              ['submitted', 'acknowledged', 'on_hold', 'awaiting_information'].includes(
+                row.status || ''
+              );
+            const teamLabel = row.assignedTeamId
+              ? teamNameById.get(row.assignedTeamId) || row.assignedTeamId
+              : null;
+
             return (
               <Card key={row.id}>
                 <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
@@ -179,47 +255,140 @@ export function RequestsClient({ initial, clerkEnabled }: Props) {
                       {row.workOrderId ? ` · WO ${row.workOrderId}` : ''}
                     </CardDescription>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap justify-end gap-2">
                     <Badge variant="secondary">{row.priority || 'normal'}</Badge>
                     <Badge>{row.status || 'submitted'}</Badge>
+                    {row.slaStatus && row.slaStatus !== 'none' ? (
+                      <Badge variant={slaBadgeVariant(row.slaStatus)}>
+                        {slaStatusLabel(row.slaStatus)}
+                      </Badge>
+                    ) : null}
                   </div>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3">
                   <p className="text-xs text-muted-foreground">
                     Assignee: {row.assignedUserId || 'Unassigned'}
+                    {teamLabel ? ` · Team: ${teamLabel}` : ''}
+                    {row.slaTargetAt
+                      ? ` · SLA due: ${formatTime(row.slaTargetAt)}`
+                      : ''}
                   </p>
+
+                  {canShowAssign ? (
+                    <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-3">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor={`team-${row.id}`}>Team</Label>
+                        <select
+                          id={`team-${row.id}`}
+                          className="border-input bg-background h-9 rounded-md border px-2 text-sm"
+                          value={draft.teamId}
+                          onChange={e => setDraft(row.id, { teamId: e.target.value })}
+                        >
+                          <option value="">No team</option>
+                          {teams.map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                              {t.kind ? ` (${t.kind})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor={`pri-${row.id}`}>Priority</Label>
+                        <select
+                          id={`pri-${row.id}`}
+                          className="border-input bg-background h-9 rounded-md border px-2 text-sm"
+                          value={draft.priority}
+                          onChange={e => setDraft(row.id, { priority: e.target.value })}
+                        >
+                          {PRIORITIES.map(p => (
+                            <option key={p} value={p}>
+                              {p}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor={`sla-${row.id}`}>SLA hours (optional)</Label>
+                        <input
+                          id={`sla-${row.id}`}
+                          type="number"
+                          min={1}
+                          placeholder="Default by priority"
+                          className="border-input bg-background h-9 rounded-md border px-2 text-sm"
+                          value={draft.slaHours}
+                          onChange={e => setDraft(row.id, { slaHours: e.target.value })}
+                        />
+                      </div>
+                      <div className="flex flex-wrap gap-2 sm:col-span-3">
+                        <Button
+                          size="sm"
+                          disabled={busyId === row.id || !draft.teamId}
+                          onClick={() =>
+                            mutate({
+                              requestId: row.id,
+                              action: 'assign',
+                              assignedTeamId: draft.teamId || null,
+                              assignedUserId: null,
+                              priority: draft.priority,
+                              slaHours: draft.slaHours
+                                ? Number(draft.slaHours)
+                                : null,
+                            })
+                          }
+                        >
+                          Assign to team
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busyId === row.id}
+                          onClick={() =>
+                            mutate({
+                              requestId: row.id,
+                              action: 'assign',
+                              assignedTeamId: draft.teamId || null,
+                              priority: draft.priority,
+                              slaHours: draft.slaHours
+                                ? Number(draft.slaHours)
+                                : null,
+                            })
+                          }
+                        >
+                          Assign to me
+                          {draft.teamId ? ' + team' : ''}
+                        </Button>
+                      </div>
+                      {!teams.length ? (
+                        <p className="text-xs text-muted-foreground sm:col-span-3">
+                          No facilities teams seeded for this org yet — you can still
+                          assign to yourself. Seed includes team_a_facilities.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+
                   <div className="flex flex-wrap gap-2">
-                    {canAssign &&
-                    ['submitted', 'acknowledged', 'on_hold'].includes(row.status || '') ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busyId === row.id}
-                        onClick={() =>
-                          mutate({ requestId: row.id, action: 'assign' })
-                        }
-                      >
-                        Assign to me
-                      </Button>
-                    ) : null}
                     {canUpdate
-                      ? next.map(status => (
-                          <Button
-                            key={status}
-                            size="sm"
-                            variant="outline"
-                            disabled={busyId === row.id}
-                            onClick={() =>
-                              mutate({
-                                requestId: row.id,
-                                action: 'status',
-                                status,
-                              })
-                            }
-                          >
-                            Mark {status}
-                          </Button>
-                        ))
+                      ? next
+                          .filter(status => status !== 'assigned' || !canShowAssign)
+                          .map(status => (
+                            <Button
+                              key={status}
+                              size="sm"
+                              variant="outline"
+                              disabled={busyId === row.id}
+                              onClick={() =>
+                                mutate({
+                                  requestId: row.id,
+                                  action: 'status',
+                                  status,
+                                })
+                              }
+                            >
+                              Mark {status}
+                            </Button>
+                          ))
                       : null}
                   </div>
                 </CardContent>

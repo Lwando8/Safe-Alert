@@ -11,6 +11,7 @@ export default async function OpsRequestsPage() {
         ok: true as const,
         organizationId: result.organizationId,
         requests: result.requests,
+        teams: result.teams,
         permissions: result.permissions,
       }
     : {

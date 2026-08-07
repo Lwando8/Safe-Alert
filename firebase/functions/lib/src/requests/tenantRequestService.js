@@ -337,7 +337,7 @@ async function assignOperationalRequest(context, input) {
         }
         const team = teamSnap.data();
         (0, requestContext_1.requireTenantMatch)(context, team.organizationId);
-        if (team.active === false) {
+        if (team.active === false || team.status === 'inactive') {
             throw new https_1.HttpsError('failed-precondition', 'Assigned team is inactive');
         }
         const teamCaps = Array.isArray(team.capabilities) && team.capabilities.length
@@ -352,6 +352,14 @@ async function assignOperationalRequest(context, input) {
         }
     }
     const now = Date.now();
+    const priority = String(input.priority || data.priority || 'normal');
+    const { computeSlaTargetAt } = await Promise.resolve().then(() => __importStar(require('../services/sla')));
+    const slaTargetAt = computeSlaTargetAt({
+        now,
+        priority,
+        slaTargetAt: input.slaTargetAt,
+        slaHours: input.slaHours,
+    });
     const workRef = db.collection(collections_1.COLLECTIONS.workOrders).doc();
     const workOrder = {
         id: workRef.id,
@@ -362,9 +370,9 @@ async function assignOperationalRequest(context, input) {
         category: data.category,
         assignedTeamId,
         assignedUserId,
-        priority: input.priority || data.priority || 'normal',
+        priority,
         status: 'assigned',
-        slaTargetAt: input.slaTargetAt ?? null,
+        slaTargetAt,
         notes: input.notes ?? null,
         attachments: [],
         resolutionSummary: null,
@@ -383,6 +391,7 @@ async function assignOperationalRequest(context, input) {
         assignedAt: now,
         updatedAt: now,
         priority: workOrder.priority,
+        slaTargetAt,
     }, { merge: true });
     await appendTimeline(ref.id, context.organizationId, {
         eventType: 'request_assigned',

@@ -745,13 +745,14 @@ exports.updateOperationalRequestStatusCallable = (0, https_1.onCall)(async (req)
 });
 exports.assignOperationalRequestCallable = (0, https_1.onCall)(async (req) => {
     const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
-    const { requestId, assignedUserId, assignedTeamId, priority, slaTargetAt, notes } = req.data || {};
+    const { requestId, assignedUserId, assignedTeamId, priority, slaTargetAt, slaHours, notes } = req.data || {};
     return (0, tenantRequestService_1.assignOperationalRequest)(context, {
         requestId,
         assignedUserId,
         assignedTeamId,
         priority,
-        slaTargetAt,
+        slaTargetAt: typeof slaTargetAt === 'number' ? slaTargetAt : null,
+        slaHours: typeof slaHours === 'number' ? slaHours : null,
         notes,
     });
 });

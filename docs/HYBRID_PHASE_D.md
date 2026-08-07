@@ -50,4 +50,4 @@ npm test --prefix firebase/functions
 
 ## Next
 
-Phase E — maintenance UX deepen (SLA, team picker).
+Phase E — **Done** — see [`HYBRID_PHASE_E.md`](./HYBRID_PHASE_E.md) (SLA targets + team picker on facilities requests).

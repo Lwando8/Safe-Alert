@@ -203,7 +203,7 @@ Already present as **separate** collections:
 | **B** | Person / Entitlement / policy / grant types / audit helper | **Yes** |
 | **C** | Map university flows onto hybrid seams without rebuild | **Done** — see [`HYBRID_PHASE_C.md`](./HYBRID_PHASE_C.md) |
 | **D** | Responder capabilities enforcement | **Done** — see [`HYBRID_PHASE_D.md`](./HYBRID_PHASE_D.md) |
-| **E** | Maintenance UX deepen (SLA, team picker) | Later |
+| **E** | Maintenance UX deepen (SLA, team picker) | **Done** — see [`HYBRID_PHASE_E.md`](./HYBRID_PHASE_E.md) |
 | **F** | My Services person-first nav | Later |
 | **G** | Additional verticals | Later |
 | **H** | Marketplace / billing | Later |

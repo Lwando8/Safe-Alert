@@ -294,6 +294,7 @@ async function run() {
       name: 'Campus Facilities',
       kind: 'facilities',
       capabilities: ['GENERAL_MAINTENANCE', 'PLUMBING', 'ELECTRICAL', 'CLEANING'],
+      status: 'active',
       active: true,
       createdAt: now,
       updatedAt: now,

@@ -326,6 +326,7 @@ export async function assignOperationalRequest(
     assignedTeamId?: string | null;
     priority?: string;
     slaTargetAt?: number | null;
+    slaHours?: number | null;
     notes?: string | null;
   }
 ) {
@@ -392,9 +393,10 @@ export async function assignOperationalRequest(
       kind?: string;
       capabilities?: string[];
       active?: boolean;
+      status?: string;
     };
     requireTenantMatch(context, team.organizationId);
-    if (team.active === false) {
+    if (team.active === false || team.status === 'inactive') {
       throw new HttpsError('failed-precondition', 'Assigned team is inactive');
     }
     const teamCaps =
@@ -416,6 +418,14 @@ export async function assignOperationalRequest(
   }
 
   const now = Date.now();
+  const priority = String(input.priority || data.priority || 'normal');
+  const { computeSlaTargetAt } = await import('../services/sla');
+  const slaTargetAt = computeSlaTargetAt({
+    now,
+    priority,
+    slaTargetAt: input.slaTargetAt,
+    slaHours: input.slaHours,
+  });
   const workRef = db.collection(COLLECTIONS.workOrders).doc();
   const workOrder = {
     id: workRef.id,
@@ -426,9 +436,9 @@ export async function assignOperationalRequest(
     category: data.category,
     assignedTeamId,
     assignedUserId,
-    priority: input.priority || data.priority || 'normal',
+    priority,
     status: 'assigned' as const,
-    slaTargetAt: input.slaTargetAt ?? null,
+    slaTargetAt,
     notes: input.notes ?? null,
     attachments: [],
     resolutionSummary: null,
@@ -449,6 +459,7 @@ export async function assignOperationalRequest(
       assignedAt: now,
       updatedAt: now,
       priority: workOrder.priority,
+      slaTargetAt,
     },
     { merge: true }
   );

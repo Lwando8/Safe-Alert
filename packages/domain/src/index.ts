@@ -10,6 +10,7 @@ export * from './personIdentity';
 export * from './entitlements';
 export * from './accessGrants';
 export * from './responderCapabilities';
+export * from './sla';
 export {
   type TenantProfile,
   type PlatformModule,

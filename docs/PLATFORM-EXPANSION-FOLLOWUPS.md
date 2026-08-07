@@ -83,5 +83,6 @@ Person-first identity + entitlement foundations:
   grant-backed incident update/location after membership revoke
 - Phase D: responder capability filters — INCIDENT_RESPONSE for SOS assign/accept;
   category-matched maintenance capabilities for ops assign (teams stay separate)
+- Phase E: maintenance UX — SLA targets by priority + team picker on `/ops/requests`
 
 Does **not** rewrite SOS Express or merge maintenance into emergency incidents.

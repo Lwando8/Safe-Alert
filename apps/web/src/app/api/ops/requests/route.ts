@@ -32,7 +32,11 @@ export async function PATCH(request: Request) {
     requestId?: string;
     action?: 'status' | 'assign';
     status?: string;
-    assignedUserId?: string;
+    assignedUserId?: string | null;
+    assignedTeamId?: string | null;
+    priority?: string | null;
+    slaTargetAt?: number | null;
+    slaHours?: number | null;
     resolutionSummary?: string;
   } = {};
   try {
@@ -56,6 +60,10 @@ export async function PATCH(request: Request) {
       ? await assignOpsRequest({
           requestId: body.requestId,
           assignedUserId: body.assignedUserId,
+          assignedTeamId: body.assignedTeamId,
+          priority: body.priority,
+          slaTargetAt: body.slaTargetAt,
+          slaHours: body.slaHours,
         })
       : await updateOpsRequestStatus({
           requestId: body.requestId,
