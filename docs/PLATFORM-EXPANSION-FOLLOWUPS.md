@@ -74,7 +74,12 @@ Clerk mobile prep remains **off** by default (`PHASE2G-MOBILE-CLERK-PREP.md`).
 ## Related: hybrid architecture
 
 Person-first identity + entitlement foundations:
-[`HYBRID_ARCHITECTURE_AUDIT.md`](./HYBRID_ARCHITECTURE_AUDIT.md) and
-[`HYBRID_PHASE_B.md`](./HYBRID_PHASE_B.md).
-Phase B adds additive `Person` / `Entitlement` / `IncidentAccessGrant` seams without
-rewriting SOS Express or merging maintenance into emergency incidents.
+[`HYBRID_ARCHITECTURE_AUDIT.md`](./HYBRID_ARCHITECTURE_AUDIT.md),
+[`HYBRID_PHASE_B.md`](./HYBRID_PHASE_B.md), and
+[`HYBRID_PHASE_C.md`](./HYBRID_PHASE_C.md).
+
+- Phase B: additive `Person` / `Entitlement` / `IncidentAccessGrant` seams
+- Phase C: university flow mapping — Person stamps, entitlement module gates,
+  grant-backed incident update/location after membership revoke
+
+Does **not** rewrite SOS Express or merge maintenance into emergency incidents.

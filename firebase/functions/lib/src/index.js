@@ -198,19 +198,30 @@ exports.createIncident = (0, https_1.onCall)(async (req) => {
     return (0, tenantIncidentService_1.createTenantIncident)(context, { type, location, meta });
 });
 exports.appendIncidentLocation = (0, https_1.onCall)(async (req) => {
-    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
     const { incidentId, location } = req.data || {};
     if (!incidentId || !location?.latitude || !location?.longitude) {
         throw new https_1.HttpsError('invalid-argument', 'incidentId and location are required');
     }
+    const { resolveUniversityIncidentContext } = await Promise.resolve().then(() => __importStar(require('./services/universityIncidentContext')));
+    const { context, viaGrant } = await resolveUniversityIncidentContext(req, String(incidentId), 'incident:location');
     const { ref, data } = await (0, tenantIncidentService_1.loadIncidentInTenant)(String(incidentId), context);
-    const isOwner = data.userId === context.userId;
-    if (!isOwner) {
+    const isOwner = data.userId === context.userId || data.personId === context.userId;
+    if (!isOwner && !viaGrant) {
         (0, requestContext_1.authorizeAnyPermission)(context, [
             'incidents:read-all',
             'incidents:update',
             'incidents:assign',
         ]);
+    }
+    if (viaGrant) {
+        const { authorizeAction } = await Promise.resolve().then(() => __importStar(require('./policy/authorizeAction')));
+        const { loadIncidentAccessGrant } = await Promise.resolve().then(() => __importStar(require('./services/incidentAccessGrantService')));
+        const grant = await loadIncidentAccessGrant(String(incidentId), context.userId);
+        await authorizeAction(context, 'update_incident', {
+            resourceOrganizationId: context.organizationId,
+            incidentGrant: grant,
+            incidentPermission: 'incident:location',
+        });
     }
     await ref.set({ lastLocation: location, updatedAt: now() }, { merge: true });
     await (0, firebaseApps_1.getRtdb)().ref(`incidentTracks/${incidentId}/points`).push({
@@ -220,7 +231,7 @@ exports.appendIncidentLocation = (0, https_1.onCall)(async (req) => {
         uid: (0, tenantIncidentService_1.actorUid)(context),
         organizationId: context.organizationId,
     });
-    return { ok: true };
+    return { ok: true, viaGrant };
 });
 exports.getNearbyIncidents = (0, https_1.onCall)(async (req) => {
     const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
@@ -340,27 +351,61 @@ exports.acceptIncident = (0, https_1.onCall)(async (req) => {
     return { ok: true, assignments };
 });
 exports.updateIncidentStatus = (0, https_1.onCall)(async (req) => {
-    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
-    (0, requestContext_1.authorize)(context, { permission: 'incidents:update' });
     const { incidentId, status } = req.data || {};
     if (!incidentId || !status)
         throw new https_1.HttpsError('invalid-argument', 'incidentId/status required');
+    const { resolveUniversityIncidentContext } = await Promise.resolve().then(() => __importStar(require('./services/universityIncidentContext')));
+    const { context, viaGrant } = await resolveUniversityIncidentContext(req, String(incidentId), 'incident:update');
+    if (!viaGrant) {
+        (0, requestContext_1.authorize)(context, { permission: 'incidents:update' });
+    }
+    else {
+        const { authorizeAction } = await Promise.resolve().then(() => __importStar(require('./policy/authorizeAction')));
+        const { loadIncidentAccessGrant } = await Promise.resolve().then(() => __importStar(require('./services/incidentAccessGrantService')));
+        const grant = await loadIncidentAccessGrant(String(incidentId), context.userId);
+        await authorizeAction(context, 'update_incident', {
+            resourceOrganizationId: context.organizationId,
+            incidentGrant: grant,
+            incidentPermission: 'incident:update',
+        });
+    }
     const { ref, data } = await (0, tenantIncidentService_1.loadIncidentInTenant)(String(incidentId), context);
     const unitId = String(context.unitId || '');
     const assignments = (data.assignments || []).map(a => String(a.responderUnitId) === unitId
         ? { ...a, status, timestamps: { ...a.timestamps, [status]: now() } }
         : a);
     await ref.set({ assignments, updatedAt: now() }, { merge: true });
+    // When incident resolves, shrink grant grace window (additive)
+    if (String(status) === 'resolved' || String(status) === 'cancelled') {
+        try {
+            const { loadIncidentAccessGrant } = await Promise.resolve().then(() => __importStar(require('./services/incidentAccessGrantService')));
+            const { INCIDENT_ACCESS_GRACE_MS } = await Promise.resolve().then(() => __importStar(require('./services/accessGrants')));
+            const grant = await loadIncidentAccessGrant(String(incidentId), context.userId);
+            if (grant && !grant.revokedAt) {
+                const { COLLECTIONS } = await Promise.resolve().then(() => __importStar(require('./services/collections')));
+                await db.doc(`${COLLECTIONS.incidentAccessGrants}/${grant.id}`).set({
+                    validUntil: now() + INCIDENT_ACCESS_GRACE_MS,
+                    updatedAt: now(),
+                    grantReason: `${grant.grantReason}|incident_${status}`,
+                }, { merge: true });
+            }
+        }
+        catch (err) {
+            console.error('grant grace update failed (non-fatal)', err);
+        }
+    }
     await db.doc(`incidents/${incidentId}/timeline/${db.collection('_').doc().id}`).set({
         eventType: 'status_updated',
         incidentId,
         status,
         userId: context.userId,
+        personId: context.userId,
         organizationId: context.organizationId,
         authProvider: context.authProvider,
+        viaGrant,
         timestamp: now(),
     });
-    return { ok: true };
+    return { ok: true, viaGrant };
 });
 exports.assignUnitToIncident = (0, https_1.onCall)(async (req) => {
     const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);

@@ -13,6 +13,8 @@ import { recordAnalyticsEvent } from '../analytics/recordAnalyticsEvent';
 import { recordAuditEvent } from '../audit/recordAuditEvent';
 import { notifyOrgEvent } from '../notifications/orgNotifications';
 import { authorizeAction } from '../policy/authorizeAction';
+import { assertUniversityModuleAccess } from '../services/universityEntitlements';
+import { ensurePersonForClerkUser } from '../services/personService';
 
 const db = getDb();
 
@@ -83,14 +85,21 @@ export async function createOperationalRequest(
 ) {
   authorize(context, { permission: 'requests:create' });
   await assertModuleEnabled(context.organizationId, 'OPERATIONS');
-  // Named policy seam (additive — same checks as above)
+  // Named policy seam + university entitlement composition
   await authorizeAction(context, 'create_request');
+  await assertUniversityModuleAccess(context, 'OPERATIONS');
 
   if (!input.category || !input.title || !input.description) {
     throw new HttpsError('invalid-argument', 'category, title, and description are required');
   }
   if (!context.siteId) {
     throw new HttpsError('failed-precondition', 'Membership has no site assignment');
+  }
+
+  try {
+    await ensurePersonForClerkUser({ clerkUserId: context.userId });
+  } catch (err) {
+    console.error('ensurePersonForClerkUser on request create failed (non-fatal)', err);
   }
 
   const now = Date.now();
@@ -101,6 +110,9 @@ export async function createOperationalRequest(
     siteId: context.siteId,
     zoneId: input.zoneId ?? null,
     reporterUserId: context.userId,
+    /** Hybrid person id — equals Clerk userId (compat) */
+    reporterPersonId: context.userId,
+    personId: context.userId,
     category: String(input.category),
     title: String(input.title).slice(0, 200),
     description: String(input.description).slice(0, 5000),

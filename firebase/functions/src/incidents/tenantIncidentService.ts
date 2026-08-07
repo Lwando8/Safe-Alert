@@ -4,6 +4,8 @@ import type { RequestContext } from '../middleware/requestContext';
 import { authorize, requireTenantMatch } from '../middleware/requestContext';
 import { getDb, getRtdb } from '../firebaseApps';
 import { recordAnalyticsEvent } from '../analytics/recordAnalyticsEvent';
+import { assertUniversityModuleAccess } from '../services/universityEntitlements';
+import { ensurePersonForClerkUser } from '../services/personService';
 
 const db = getDb();
 
@@ -25,6 +27,7 @@ export async function loadIncidentInTenant(incidentId: string, context: RequestC
 /**
  * Create an incident stamped ONLY from server RequestContext.
  * Client organizationId / siteId / providerId hints are ignored.
+ * Hybrid: personId compat === Clerk userId.
  */
 export async function createTenantIncident(
   context: RequestContext,
@@ -35,12 +38,19 @@ export async function createTenantIncident(
   }
 ) {
   authorize(context, { permission: 'incidents:create' });
+  await assertUniversityModuleAccess(context, 'SAFETY');
 
   if (!input.type || !input.location?.latitude || !input.location?.longitude) {
     throw new HttpsError('invalid-argument', 'type and location are required');
   }
   if (!context.siteId) {
     throw new HttpsError('failed-precondition', 'Membership has no site assignment');
+  }
+
+  try {
+    await ensurePersonForClerkUser({ clerkUserId: context.userId });
+  } catch (err) {
+    console.error('ensurePersonForClerkUser on incident create failed (non-fatal)', err);
   }
 
   const now = Date.now();
@@ -52,6 +62,8 @@ export async function createTenantIncident(
     status: 'open',
     mapStatus: 'unassigned',
     userId: context.userId,
+    /** Hybrid person id — equals Clerk userId (compat, no re-key) */
+    personId: context.userId,
     organizationId: context.organizationId,
     siteId: context.siteId,
     zoneId: null as string | null,
@@ -69,6 +81,7 @@ export async function createTenantIncident(
     eventType: 'incident_created',
     incidentId,
     userId: context.userId,
+    personId: context.userId,
     organizationId: context.organizationId,
     authProvider: context.authProvider,
     timestamp: now,
@@ -102,6 +115,7 @@ export async function listTenantIncidents(
   options?: { status?: string; limit?: number }
 ) {
   authorize(context, { permission: 'incidents:read-all' });
+  await assertUniversityModuleAccess(context, 'SAFETY');
 
   const limit = Math.min(Math.max(Number(options?.limit) || 100, 1), 200);
   let query: admin.firestore.Query = db

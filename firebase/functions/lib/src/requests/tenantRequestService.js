@@ -14,6 +14,8 @@ const recordAnalyticsEvent_1 = require("../analytics/recordAnalyticsEvent");
 const recordAuditEvent_1 = require("../audit/recordAuditEvent");
 const orgNotifications_1 = require("../notifications/orgNotifications");
 const authorizeAction_1 = require("../policy/authorizeAction");
+const universityEntitlements_1 = require("../services/universityEntitlements");
+const personService_1 = require("../services/personService");
 const db = (0, firebaseApps_1.getDb)();
 const ALLOWED_TRANSITIONS = {
     submitted: ['acknowledged', 'assigned', 'closed'],
@@ -53,13 +55,20 @@ async function loadRequestInTenant(requestId, context) {
 async function createOperationalRequest(context, input) {
     (0, requestContext_1.authorize)(context, { permission: 'requests:create' });
     await (0, moduleGate_1.assertModuleEnabled)(context.organizationId, 'OPERATIONS');
-    // Named policy seam (additive — same checks as above)
+    // Named policy seam + university entitlement composition
     await (0, authorizeAction_1.authorizeAction)(context, 'create_request');
+    await (0, universityEntitlements_1.assertUniversityModuleAccess)(context, 'OPERATIONS');
     if (!input.category || !input.title || !input.description) {
         throw new https_1.HttpsError('invalid-argument', 'category, title, and description are required');
     }
     if (!context.siteId) {
         throw new https_1.HttpsError('failed-precondition', 'Membership has no site assignment');
+    }
+    try {
+        await (0, personService_1.ensurePersonForClerkUser)({ clerkUserId: context.userId });
+    }
+    catch (err) {
+        console.error('ensurePersonForClerkUser on request create failed (non-fatal)', err);
     }
     const now = Date.now();
     const ref = db.collection(collections_1.COLLECTIONS.operationalRequests).doc();
@@ -69,6 +78,9 @@ async function createOperationalRequest(context, input) {
         siteId: context.siteId,
         zoneId: input.zoneId ?? null,
         reporterUserId: context.userId,
+        /** Hybrid person id — equals Clerk userId (compat) */
+        reporterPersonId: context.userId,
+        personId: context.userId,
         category: String(input.category),
         title: String(input.title).slice(0, 200),
         description: String(input.description).slice(0, 5000),

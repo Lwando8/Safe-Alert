@@ -216,20 +216,38 @@ export const createIncident = onCall(async req => {
 });
 
 export const appendIncidentLocation = onCall(async req => {
-  const context = await resolveRequestContextFromCallable(req);
   const { incidentId, location } = req.data || {};
   if (!incidentId || !location?.latitude || !location?.longitude) {
     throw new HttpsError('invalid-argument', 'incidentId and location are required');
   }
 
+  const { resolveUniversityIncidentContext } = await import(
+    './services/universityIncidentContext'
+  );
+  const { context, viaGrant } = await resolveUniversityIncidentContext(
+    req,
+    String(incidentId),
+    'incident:location'
+  );
+
   const { ref, data } = await loadIncidentInTenant(String(incidentId), context);
-  const isOwner = data.userId === context.userId;
-  if (!isOwner) {
+  const isOwner = data.userId === context.userId || data.personId === context.userId;
+  if (!isOwner && !viaGrant) {
     authorizeAnyPermission(context, [
       'incidents:read-all',
       'incidents:update',
       'incidents:assign',
     ]);
+  }
+  if (viaGrant) {
+    const { authorizeAction } = await import('./policy/authorizeAction');
+    const { loadIncidentAccessGrant } = await import('./services/incidentAccessGrantService');
+    const grant = await loadIncidentAccessGrant(String(incidentId), context.userId);
+    await authorizeAction(context, 'update_incident', {
+      resourceOrganizationId: context.organizationId,
+      incidentGrant: grant,
+      incidentPermission: 'incident:location',
+    });
   }
 
   await ref.set({ lastLocation: location, updatedAt: now() }, { merge: true });
@@ -240,7 +258,7 @@ export const appendIncidentLocation = onCall(async req => {
     uid: actorUid(context),
     organizationId: context.organizationId,
   });
-  return { ok: true };
+  return { ok: true, viaGrant };
 });
 
 export const getNearbyIncidents = onCall(async req => {
@@ -375,11 +393,30 @@ export const acceptIncident = onCall(async req => {
 });
 
 export const updateIncidentStatus = onCall(async req => {
-  const context = await resolveRequestContextFromCallable(req);
-  authorize(context, { permission: 'incidents:update' });
-
   const { incidentId, status } = req.data || {};
   if (!incidentId || !status) throw new HttpsError('invalid-argument', 'incidentId/status required');
+
+  const { resolveUniversityIncidentContext } = await import(
+    './services/universityIncidentContext'
+  );
+  const { context, viaGrant } = await resolveUniversityIncidentContext(
+    req,
+    String(incidentId),
+    'incident:update'
+  );
+
+  if (!viaGrant) {
+    authorize(context, { permission: 'incidents:update' });
+  } else {
+    const { authorizeAction } = await import('./policy/authorizeAction');
+    const { loadIncidentAccessGrant } = await import('./services/incidentAccessGrantService');
+    const grant = await loadIncidentAccessGrant(String(incidentId), context.userId);
+    await authorizeAction(context, 'update_incident', {
+      resourceOrganizationId: context.organizationId,
+      incidentGrant: grant,
+      incidentPermission: 'incident:update',
+    });
+  }
 
   const { ref, data } = await loadIncidentInTenant(String(incidentId), context);
   const unitId = String(context.unitId || '');
@@ -389,16 +426,41 @@ export const updateIncidentStatus = onCall(async req => {
       : a
   );
   await ref.set({ assignments, updatedAt: now() }, { merge: true });
+
+  // When incident resolves, shrink grant grace window (additive)
+  if (String(status) === 'resolved' || String(status) === 'cancelled') {
+    try {
+      const { loadIncidentAccessGrant } = await import('./services/incidentAccessGrantService');
+      const { INCIDENT_ACCESS_GRACE_MS } = await import('./services/accessGrants');
+      const grant = await loadIncidentAccessGrant(String(incidentId), context.userId);
+      if (grant && !grant.revokedAt) {
+        const { COLLECTIONS } = await import('./services/collections');
+        await db.doc(`${COLLECTIONS.incidentAccessGrants}/${grant.id}`).set(
+          {
+            validUntil: now() + INCIDENT_ACCESS_GRACE_MS,
+            updatedAt: now(),
+            grantReason: `${grant.grantReason}|incident_${status}`,
+          },
+          { merge: true }
+        );
+      }
+    } catch (err) {
+      console.error('grant grace update failed (non-fatal)', err);
+    }
+  }
+
   await db.doc(`incidents/${incidentId}/timeline/${db.collection('_').doc().id}`).set({
     eventType: 'status_updated',
     incidentId,
     status,
     userId: context.userId,
+    personId: context.userId,
     organizationId: context.organizationId,
     authProvider: context.authProvider,
+    viaGrant,
     timestamp: now(),
   });
-  return { ok: true };
+  return { ok: true, viaGrant };
 });
 
 export const assignUnitToIncident = onCall(async req => {

@@ -9,6 +9,8 @@ const https_1 = require("firebase-functions/v2/https");
 const requestContext_1 = require("../middleware/requestContext");
 const firebaseApps_1 = require("../firebaseApps");
 const recordAnalyticsEvent_1 = require("../analytics/recordAnalyticsEvent");
+const universityEntitlements_1 = require("../services/universityEntitlements");
+const personService_1 = require("../services/personService");
 const db = (0, firebaseApps_1.getDb)();
 function actorUid(context) {
     return context.firebaseUid || context.userId;
@@ -25,14 +27,22 @@ async function loadIncidentInTenant(incidentId, context) {
 /**
  * Create an incident stamped ONLY from server RequestContext.
  * Client organizationId / siteId / providerId hints are ignored.
+ * Hybrid: personId compat === Clerk userId.
  */
 async function createTenantIncident(context, input) {
     (0, requestContext_1.authorize)(context, { permission: 'incidents:create' });
+    await (0, universityEntitlements_1.assertUniversityModuleAccess)(context, 'SAFETY');
     if (!input.type || !input.location?.latitude || !input.location?.longitude) {
         throw new https_1.HttpsError('invalid-argument', 'type and location are required');
     }
     if (!context.siteId) {
         throw new https_1.HttpsError('failed-precondition', 'Membership has no site assignment');
+    }
+    try {
+        await (0, personService_1.ensurePersonForClerkUser)({ clerkUserId: context.userId });
+    }
+    catch (err) {
+        console.error('ensurePersonForClerkUser on incident create failed (non-fatal)', err);
     }
     const now = Date.now();
     const incidentId = db.collection('incidents').doc().id;
@@ -43,6 +53,8 @@ async function createTenantIncident(context, input) {
         status: 'open',
         mapStatus: 'unassigned',
         userId: context.userId,
+        /** Hybrid person id — equals Clerk userId (compat, no re-key) */
+        personId: context.userId,
         organizationId: context.organizationId,
         siteId: context.siteId,
         zoneId: null,
@@ -59,6 +71,7 @@ async function createTenantIncident(context, input) {
         eventType: 'incident_created',
         incidentId,
         userId: context.userId,
+        personId: context.userId,
         organizationId: context.organizationId,
         authProvider: context.authProvider,
         timestamp: now,
@@ -86,6 +99,7 @@ async function createTenantIncident(context, input) {
  */
 async function listTenantIncidents(context, options) {
     (0, requestContext_1.authorize)(context, { permission: 'incidents:read-all' });
+    await (0, universityEntitlements_1.assertUniversityModuleAccess)(context, 'SAFETY');
     const limit = Math.min(Math.max(Number(options?.limit) || 100, 1), 200);
     let query = db
         .collection('incidents')

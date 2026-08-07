@@ -29,6 +29,6 @@ npm test --prefix firebase/functions
 # hybridArchitecture.test.ts + authorizeAction.test.ts added
 ```
 
-## Next phase (not this cycle)
+## Next phase
 
-Phase C — map university flows onto Person/Entitlement without rebuild; deepen grant checks on read paths after membership revoke.
+Phase C — **Done** — see [`HYBRID_PHASE_C.md`](./HYBRID_PHASE_C.md) (Person stamp, entitlement gates, grant-backed post-revoke incident update/location).

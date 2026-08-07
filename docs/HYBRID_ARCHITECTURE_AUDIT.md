@@ -201,7 +201,7 @@ Already present as **separate** collections:
 |-------|-------|------------|
 | **A** | Audit (this doc) | **Yes** |
 | **B** | Person / Entitlement / policy / grant types / audit helper | **Yes** |
-| **C** | Map university flows onto hybrid seams without rebuild | Later |
+| **C** | Map university flows onto hybrid seams without rebuild | **Done** — see [`HYBRID_PHASE_C.md`](./HYBRID_PHASE_C.md) |
 | **D** | Responder capabilities enforcement | Later |
 | **E** | Maintenance UX deepen (SLA, team picker) | Later |
 | **F** | My Services person-first nav | Later |
@@ -259,4 +259,4 @@ Vocabulary map (docs only — stored enums unchanged):
 
 ## Stop conditions observed
 
-None that block Phase B additive foundations. Dual SOS remains an accepted deferred risk (**DEPRECATE LATER**), not a Phase B rewrite trigger.
+None that block Phase B/C additive foundations. Dual SOS remains an accepted deferred risk (**DEPRECATE LATER**), not a rewrite trigger. Phase C keeps Express SOS and does not disable Firebase auth fallback.
