@@ -18,6 +18,7 @@ export interface MembershipRecord {
   responderProfile?: {
     unitCode?: string;
     responderType?: string;
+    capabilities?: string[];
     approvalStatus?: string;
     employmentStatus?: string;
     deviceBindingRequired?: boolean;

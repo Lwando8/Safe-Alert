@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.loadRequestInTenant = loadRequestInTenant;
 exports.createOperationalRequest = createOperationalRequest;
@@ -271,6 +304,53 @@ async function assignOperationalRequest(context, input) {
     if (!['submitted', 'acknowledged', 'assigned', 'on_hold', 'awaiting_information'].includes(current)) {
         throw new https_1.HttpsError('failed-precondition', `Cannot assign from status ${current}`);
     }
+    const category = String(data.category || '');
+    const assignedUserId = input.assignedUserId ?? null;
+    const assignedTeamId = input.assignedTeamId ?? data.assignedTeamId ?? null;
+    // Phase D: maintenance capability filters — security-only assignees cannot take facilities work
+    const { canHandleRequestCategory, defaultCapabilitiesForTeamKind, } = await Promise.resolve().then(() => __importStar(require('../services/responderCapabilities')));
+    if (assignedUserId) {
+        const memSnap = await db
+            .collection('memberships')
+            .where('organizationId', '==', context.organizationId)
+            .where('userId', '==', String(assignedUserId))
+            .where('status', '==', 'active')
+            .limit(1)
+            .get();
+        if (memSnap.empty) {
+            throw new https_1.HttpsError('failed-precondition', 'Assignee has no active membership in this organization');
+        }
+        const mem = memSnap.docs[0].data();
+        if (!canHandleRequestCategory({
+            capabilities: mem.responderProfile?.capabilities,
+            responderType: mem.responderProfile?.responderType,
+            membershipKind: mem.kind,
+            category,
+        })) {
+            throw new https_1.HttpsError('failed-precondition', `Assignee lacks capability for request category "${category}" (security responders cannot be assigned facilities work)`);
+        }
+    }
+    if (assignedTeamId) {
+        const teamSnap = await db.doc(`${collections_1.COLLECTIONS.teams}/${String(assignedTeamId)}`).get();
+        if (!teamSnap.exists) {
+            throw new https_1.HttpsError('not-found', 'Assigned team not found');
+        }
+        const team = teamSnap.data();
+        (0, requestContext_1.requireTenantMatch)(context, team.organizationId);
+        if (team.active === false) {
+            throw new https_1.HttpsError('failed-precondition', 'Assigned team is inactive');
+        }
+        const teamCaps = Array.isArray(team.capabilities) && team.capabilities.length
+            ? team.capabilities
+            : defaultCapabilitiesForTeamKind(team.kind);
+        if (!canHandleRequestCategory({
+            capabilities: teamCaps,
+            teamKind: team.kind,
+            category,
+        })) {
+            throw new https_1.HttpsError('failed-precondition', `Team lacks capability for request category "${category}"`);
+        }
+    }
     const now = Date.now();
     const workRef = db.collection(collections_1.COLLECTIONS.workOrders).doc();
     const workOrder = {
@@ -280,8 +360,8 @@ async function assignOperationalRequest(context, input) {
         zoneId: data.zoneId ?? null,
         requestId: ref.id,
         category: data.category,
-        assignedTeamId: input.assignedTeamId ?? data.assignedTeamId ?? null,
-        assignedUserId: input.assignedUserId ?? null,
+        assignedTeamId,
+        assignedUserId,
         priority: input.priority || data.priority || 'normal',
         status: 'assigned',
         slaTargetAt: input.slaTargetAt ?? null,

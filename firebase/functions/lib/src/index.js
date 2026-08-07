@@ -246,6 +246,7 @@ exports.getNearbyIncidents = (0, https_1.onCall)(async (req) => {
         ? (0, geo_1.filterIncidentsByRadius)(listed.incidents, center, radiusKm)
         : listed.incidents;
     if (incidentId) {
+        const { canRespondToIncident, resolveEffectiveCapabilities } = await Promise.resolve().then(() => __importStar(require('./services/responderCapabilities')));
         const unitSnap = await db
             .collection('responderUnits')
             .where('organizationId', '==', context.organizationId)
@@ -257,12 +258,24 @@ exports.getNearbyIncidents = (0, https_1.onCall)(async (req) => {
             center,
             organizationId: listed.organizationId,
             authProvider: listed.authProvider,
-            units: unitSnap.docs.map(d => ({
-                id: d.id,
-                ...d.data(),
-                canAssign: true,
-                onShift: true,
-            })),
+            units: unitSnap.docs.map(d => {
+                const unit = d.data();
+                const canAssign = canRespondToIncident({
+                    capabilities: unit.capabilities,
+                    responderType: unit.responderType,
+                    incidentType: undefined,
+                });
+                return {
+                    id: d.id,
+                    ...unit,
+                    capabilities: resolveEffectiveCapabilities({
+                        capabilities: unit.capabilities,
+                        responderType: unit.responderType,
+                    }),
+                    canAssign,
+                    onShift: true,
+                };
+            }),
             incidents,
             geoFiltered: !!center,
         };
@@ -296,6 +309,20 @@ exports.acceptIncident = (0, https_1.onCall)(async (req) => {
     const unitId = String(context.unitId || '');
     if (!unitId) {
         throw new https_1.HttpsError('failed-precondition', 'No responder unit bound to membership');
+    }
+    // Phase D: security capability gate — maintenance units cannot accept SOS incidents
+    const { canRespondToIncident } = await Promise.resolve().then(() => __importStar(require('./services/responderCapabilities')));
+    const unitSnap = await db.doc(`responderUnits/${unitId}`).get();
+    const unit = unitSnap.exists
+        ? unitSnap.data()
+        : null;
+    if (!canRespondToIncident({
+        capabilities: unit?.capabilities,
+        responderType: unit?.responderType,
+        membershipKind: context.role,
+        incidentType: String(data.type || data.category || ''),
+    })) {
+        throw new https_1.HttpsError('failed-precondition', 'Responder lacks INCIDENT_RESPONSE capability for emergency incidents');
     }
     const assignments = [...(data.assignments || [])];
     const existing = assignments.find(a => String(a.responderUnitId) === unitId);
@@ -409,7 +436,8 @@ exports.updateIncidentStatus = (0, https_1.onCall)(async (req) => {
 });
 exports.assignUnitToIncident = (0, https_1.onCall)(async (req) => {
     const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
-    (0, requestContext_1.authorize)(context, { permission: 'incidents:assign' });
+    const { authorizeAction } = await Promise.resolve().then(() => __importStar(require('./policy/authorizeAction')));
+    await authorizeAction(context, 'assign_incident');
     const { incidentId, responderUnitId } = req.data || {};
     if (!incidentId || !responderUnitId) {
         throw new https_1.HttpsError('invalid-argument', 'incidentId and responderUnitId are required');
@@ -420,6 +448,15 @@ exports.assignUnitToIncident = (0, https_1.onCall)(async (req) => {
         throw new https_1.HttpsError('not-found', 'Responder unit not found');
     const unit = unitSnap.data();
     (0, requestContext_1.requireTenantMatch)(context, unit.organizationId);
+    // Phase D: only INCIDENT_RESPONSE-capable units for emergency incidents
+    const { canRespondToIncident } = await Promise.resolve().then(() => __importStar(require('./services/responderCapabilities')));
+    if (!canRespondToIncident({
+        capabilities: unit.capabilities,
+        responderType: unit.responderType,
+        incidentType: String(data.type || data.category || ''),
+    })) {
+        throw new https_1.HttpsError('failed-precondition', 'Unit lacks INCIDENT_RESPONSE capability (maintenance/facilities units cannot be assigned to emergency incidents)');
+    }
     const assignment = {
         responderUnitId,
         responderId: unit.unitCode,

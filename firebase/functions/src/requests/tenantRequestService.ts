@@ -339,6 +339,82 @@ export async function assignOperationalRequest(
     throw new HttpsError('failed-precondition', `Cannot assign from status ${current}`);
   }
 
+  const category = String(data.category || '');
+  const assignedUserId = input.assignedUserId ?? null;
+  const assignedTeamId = input.assignedTeamId ?? data.assignedTeamId ?? null;
+
+  // Phase D: maintenance capability filters — security-only assignees cannot take facilities work
+  const {
+    canHandleRequestCategory,
+    defaultCapabilitiesForTeamKind,
+  } = await import('../services/responderCapabilities');
+
+  if (assignedUserId) {
+    const memSnap = await db
+      .collection('memberships')
+      .where('organizationId', '==', context.organizationId)
+      .where('userId', '==', String(assignedUserId))
+      .where('status', '==', 'active')
+      .limit(1)
+      .get();
+    if (memSnap.empty) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Assignee has no active membership in this organization'
+      );
+    }
+    const mem = memSnap.docs[0]!.data() as {
+      kind?: string;
+      responderProfile?: { capabilities?: string[]; responderType?: string };
+    };
+    if (
+      !canHandleRequestCategory({
+        capabilities: mem.responderProfile?.capabilities,
+        responderType: mem.responderProfile?.responderType,
+        membershipKind: mem.kind,
+        category,
+      })
+    ) {
+      throw new HttpsError(
+        'failed-precondition',
+        `Assignee lacks capability for request category "${category}" (security responders cannot be assigned facilities work)`
+      );
+    }
+  }
+
+  if (assignedTeamId) {
+    const teamSnap = await db.doc(`${COLLECTIONS.teams}/${String(assignedTeamId)}`).get();
+    if (!teamSnap.exists) {
+      throw new HttpsError('not-found', 'Assigned team not found');
+    }
+    const team = teamSnap.data() as {
+      organizationId?: string;
+      kind?: string;
+      capabilities?: string[];
+      active?: boolean;
+    };
+    requireTenantMatch(context, team.organizationId);
+    if (team.active === false) {
+      throw new HttpsError('failed-precondition', 'Assigned team is inactive');
+    }
+    const teamCaps =
+      Array.isArray(team.capabilities) && team.capabilities.length
+        ? team.capabilities
+        : defaultCapabilitiesForTeamKind(team.kind);
+    if (
+      !canHandleRequestCategory({
+        capabilities: teamCaps,
+        teamKind: team.kind,
+        category,
+      })
+    ) {
+      throw new HttpsError(
+        'failed-precondition',
+        `Team lacks capability for request category "${category}"`
+      );
+    }
+  }
+
   const now = Date.now();
   const workRef = db.collection(COLLECTIONS.workOrders).doc();
   const workOrder = {
@@ -348,8 +424,8 @@ export async function assignOperationalRequest(
     zoneId: data.zoneId ?? null,
     requestId: ref.id,
     category: data.category,
-    assignedTeamId: input.assignedTeamId ?? data.assignedTeamId ?? null,
-    assignedUserId: input.assignedUserId ?? null,
+    assignedTeamId,
+    assignedUserId,
     priority: input.priority || data.priority || 'normal',
     status: 'assigned' as const,
     slaTargetAt: input.slaTargetAt ?? null,

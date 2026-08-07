@@ -281,6 +281,9 @@ export const getNearbyIncidents = onCall(async req => {
     : listed.incidents;
 
   if (incidentId) {
+    const { canRespondToIncident, resolveEffectiveCapabilities } = await import(
+      './services/responderCapabilities'
+    );
     const unitSnap = await db
       .collection('responderUnits')
       .where('organizationId', '==', context.organizationId)
@@ -292,12 +295,29 @@ export const getNearbyIncidents = onCall(async req => {
       center,
       organizationId: listed.organizationId,
       authProvider: listed.authProvider,
-      units: unitSnap.docs.map(d => ({
-        id: d.id,
-        ...d.data(),
-        canAssign: true,
-        onShift: true,
-      })),
+      units: unitSnap.docs.map(d => {
+        const unit = d.data() as {
+          id?: string;
+          responderType?: string;
+          capabilities?: string[];
+          active?: boolean;
+        };
+        const canAssign = canRespondToIncident({
+          capabilities: unit.capabilities,
+          responderType: unit.responderType,
+          incidentType: undefined,
+        });
+        return {
+          id: d.id,
+          ...unit,
+          capabilities: resolveEffectiveCapabilities({
+            capabilities: unit.capabilities,
+            responderType: unit.responderType,
+          }),
+          canAssign,
+          onShift: true,
+        };
+      }),
       incidents,
       geoFiltered: !!center,
     };
@@ -335,6 +355,26 @@ export const acceptIncident = onCall(async req => {
   const unitId = String(context.unitId || '');
   if (!unitId) {
     throw new HttpsError('failed-precondition', 'No responder unit bound to membership');
+  }
+
+  // Phase D: security capability gate — maintenance units cannot accept SOS incidents
+  const { canRespondToIncident } = await import('./services/responderCapabilities');
+  const unitSnap = await db.doc(`responderUnits/${unitId}`).get();
+  const unit = unitSnap.exists
+    ? (unitSnap.data() as { responderType?: string; capabilities?: string[] })
+    : null;
+  if (
+    !canRespondToIncident({
+      capabilities: unit?.capabilities,
+      responderType: unit?.responderType,
+      membershipKind: context.role,
+      incidentType: String(data.type || data.category || ''),
+    })
+  ) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Responder lacks INCIDENT_RESPONSE capability for emergency incidents'
+    );
   }
 
   const assignments = [...((data.assignments as Array<Record<string, unknown>>) || [])];
@@ -465,7 +505,8 @@ export const updateIncidentStatus = onCall(async req => {
 
 export const assignUnitToIncident = onCall(async req => {
   const context = await resolveRequestContextFromCallable(req);
-  authorize(context, { permission: 'incidents:assign' });
+  const { authorizeAction } = await import('./policy/authorizeAction');
+  await authorizeAction(context, 'assign_incident');
 
   const { incidentId, responderUnitId } = req.data || {};
   if (!incidentId || !responderUnitId) {
@@ -478,9 +519,25 @@ export const assignUnitToIncident = onCall(async req => {
   const unit = unitSnap.data() as {
     unitCode: string;
     responderType: string;
+    capabilities?: string[];
     organizationId?: string;
   };
   requireTenantMatch(context, unit.organizationId);
+
+  // Phase D: only INCIDENT_RESPONSE-capable units for emergency incidents
+  const { canRespondToIncident } = await import('./services/responderCapabilities');
+  if (
+    !canRespondToIncident({
+      capabilities: unit.capabilities,
+      responderType: unit.responderType,
+      incidentType: String(data.type || data.category || ''),
+    })
+  ) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Unit lacks INCIDENT_RESPONSE capability (maintenance/facilities units cannot be assigned to emergency incidents)'
+    );
+  }
 
   const assignment = {
     responderUnitId,

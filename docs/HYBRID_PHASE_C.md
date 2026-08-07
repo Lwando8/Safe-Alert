@@ -45,4 +45,4 @@ npm test --prefix firebase/functions
 
 ## Next
 
-Phase D — responder capabilities enforcement (maintenance vs security assignment filters).
+Phase D — **Done** — see [`HYBRID_PHASE_D.md`](./HYBRID_PHASE_D.md) (security vs maintenance capability filters).

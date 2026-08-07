@@ -81,5 +81,7 @@ Person-first identity + entitlement foundations:
 - Phase B: additive `Person` / `Entitlement` / `IncidentAccessGrant` seams
 - Phase C: university flow mapping — Person stamps, entitlement module gates,
   grant-backed incident update/location after membership revoke
+- Phase D: responder capability filters — INCIDENT_RESPONSE for SOS assign/accept;
+  category-matched maintenance capabilities for ops assign (teams stay separate)
 
 Does **not** rewrite SOS Express or merge maintenance into emergency incidents.

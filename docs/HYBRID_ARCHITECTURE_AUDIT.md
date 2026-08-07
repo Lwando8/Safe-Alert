@@ -84,7 +84,7 @@ Firebase createIncident/acceptIncident/... → Firestore + timeline + FCM trigge
 - Domain `Responder` + `responderUnits` / `shifts`
 - Membership embed `responderProfile`
 - Mobile responder UI → Express
-- No first-class `capabilities[]` yet
+- Phase D: `capabilities[]` (+ type/kind defaults) gate Firestore incident assign/accept and ops request assign
 
 ### Maintenance / work management
 
@@ -202,7 +202,7 @@ Already present as **separate** collections:
 | **A** | Audit (this doc) | **Yes** |
 | **B** | Person / Entitlement / policy / grant types / audit helper | **Yes** |
 | **C** | Map university flows onto hybrid seams without rebuild | **Done** — see [`HYBRID_PHASE_C.md`](./HYBRID_PHASE_C.md) |
-| **D** | Responder capabilities enforcement | Later |
+| **D** | Responder capabilities enforcement | **Done** — see [`HYBRID_PHASE_D.md`](./HYBRID_PHASE_D.md) |
 | **E** | Maintenance UX deepen (SLA, team picker) | Later |
 | **F** | My Services person-first nav | Later |
 | **G** | Additional verticals | Later |

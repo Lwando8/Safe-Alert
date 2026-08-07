@@ -68,3 +68,4 @@ See also operator follow-ups: [`PLATFORM-EXPANSION-FOLLOWUPS.md`](./PLATFORM-EXP
 | Hybrid person-first architecture | See [`HYBRID_ARCHITECTURE_AUDIT.md`](./HYBRID_ARCHITECTURE_AUDIT.md) |
 | Hybrid Phase B foundations | [`HYBRID_PHASE_B.md`](./HYBRID_PHASE_B.md) |
 | Hybrid Phase C university mapping | [`HYBRID_PHASE_C.md`](./HYBRID_PHASE_C.md) |
+| Hybrid Phase D responder capabilities | [`HYBRID_PHASE_D.md`](./HYBRID_PHASE_D.md) |

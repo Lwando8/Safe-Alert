@@ -245,6 +245,7 @@ async function run() {
         id: 'unit_a1',
         unitCode: 'UNIT-A1',
         responderType: 'campus_security',
+        capabilities: ['INCIDENT_RESPONSE', 'PATROL'],
         organizationId: 'university-a',
         active: true,
         createdAt: now,
@@ -254,7 +255,30 @@ async function run() {
         id: 'unit_b1',
         unitCode: 'UNIT-B1',
         responderType: 'campus_security',
+        capabilities: ['INCIDENT_RESPONSE', 'PATROL'],
         organizationId: 'university-b',
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+    }, { merge: true });
+    // Phase D: facilities unit — must NOT be assignable to emergency incidents
+    await db.doc('responderUnits/unit_a_maint').set({
+        id: 'unit_a_maint',
+        unitCode: 'UNIT-A-MAINT',
+        responderType: 'MAINTENANCE',
+        capabilities: ['GENERAL_MAINTENANCE', 'PLUMBING', 'ELECTRICAL'],
+        organizationId: 'university-a',
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+    }, { merge: true });
+    await db.doc('teams/team_a_facilities').set({
+        id: 'team_a_facilities',
+        organizationId: 'university-a',
+        siteId: siteA,
+        name: 'Campus Facilities',
+        kind: 'facilities',
+        capabilities: ['GENERAL_MAINTENANCE', 'PLUMBING', 'ELECTRICAL', 'CLEANING'],
         active: true,
         createdAt: now,
         updatedAt: now,
@@ -279,6 +303,7 @@ async function run() {
         responderProfile: {
             unitCode: 'unit_a1',
             responderType: 'campus_security',
+            capabilities: ['INCIDENT_RESPONSE', 'PATROL'],
             approvalStatus: 'approved',
             employmentStatus: 'active',
         },
@@ -420,7 +445,8 @@ async function run() {
         operationalRequests: ['fixture_req_a', 'fixture_req_b'],
         communityAlerts: ['fixture_alert_a', 'fixture_alert_b'],
         broadcasts: ['fixture_broadcast_a', 'fixture_broadcast_b'],
-        responderUnits: ['unit_a1', 'unit_b1'],
+        responderUnits: ['unit_a1', 'unit_b1', 'unit_a_maint'],
+        teams: ['team_a_facilities'],
     }, null, 2));
 }
 run().catch(err => {
