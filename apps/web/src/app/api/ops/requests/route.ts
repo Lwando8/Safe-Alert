@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
-import { loadOpsRequestsForSession } from '@/lib/ops-requests';
+import {
+  assignOpsRequest,
+  loadOpsRequestsForSession,
+  updateOpsRequestStatus,
+} from '@/lib/ops-requests';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,4 +25,56 @@ export async function GET(request: Request) {
     return NextResponse.json(result, { status });
   }
   return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } });
+}
+
+export async function PATCH(request: Request) {
+  let body: {
+    requestId?: string;
+    action?: 'status' | 'assign';
+    status?: string;
+    assignedUserId?: string;
+    resolutionSummary?: string;
+  } = {};
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { ok: false, code: 'invalid', message: 'Invalid JSON' },
+      { status: 400 }
+    );
+  }
+
+  if (!body.requestId) {
+    return NextResponse.json(
+      { ok: false, code: 'invalid', message: 'requestId required' },
+      { status: 400 }
+    );
+  }
+
+  const result =
+    body.action === 'assign'
+      ? await assignOpsRequest({
+          requestId: body.requestId,
+          assignedUserId: body.assignedUserId,
+        })
+      : await updateOpsRequestStatus({
+          requestId: body.requestId,
+          status: String(body.status || ''),
+          resolutionSummary: body.resolutionSummary,
+        });
+
+  if (!result.ok) {
+    const status =
+      result.code === 'unauthenticated'
+        ? 401
+        : result.code === 'permission_denied' || result.code === 'no_membership'
+          ? 403
+          : result.code === 'not_found'
+            ? 404
+            : result.code === 'invalid'
+              ? 400
+              : 503;
+    return NextResponse.json(result, { status });
+  }
+  return NextResponse.json(result);
 }

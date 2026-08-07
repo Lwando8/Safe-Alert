@@ -25,7 +25,9 @@
     "firebase:functions:serve": "npm --prefix firebase/functions run serve",
     "firebase": "firebase",
     "firebase:login": "firebase login --no-localhost",
-    "firebase:deploy:functions": "npm --prefix firebase/functions run deploy -- --project seren-sos"
+    "firebase:deploy:functions": "npm --prefix firebase/functions run deploy -- --project seren-sos",
+    "firebase:deploy:firestore": "firebase deploy --only firestore:rules,firestore:indexes --config firebase/firebase.json --project seren-sos",
+    "firebase:deploy:expansion": "npm run firebase:functions:build && firebase deploy --only functions,firestore:rules,firestore:indexes --config firebase/firebase.json --project seren-sos"
   },
   "dependencies": {
     "@clerk/expo": "^4.2.1",

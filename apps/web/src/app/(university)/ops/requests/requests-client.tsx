@@ -29,6 +29,7 @@ type Props = {
     ok: boolean;
     organizationId?: string;
     requests?: RequestRow[];
+    permissions?: string[];
     code?: string;
     message?: string;
   };
@@ -44,14 +45,31 @@ function formatTime(ts?: number) {
   }
 }
 
+const NEXT_STATUS: Record<string, string[]> = {
+  submitted: ['acknowledged', 'assigned'],
+  acknowledged: ['assigned', 'on_hold'],
+  assigned: ['in_progress', 'on_hold'],
+  in_progress: ['resolved', 'on_hold'],
+  on_hold: ['in_progress', 'assigned'],
+  resolved: ['closed'],
+};
+
 export function RequestsClient({ initial, clerkEnabled }: Props) {
   const { tenantEpoch } = useOpsTenantBoundary();
   const [rows, setRows] = useState<RequestRow[]>(initial.requests || []);
   const [organizationId, setOrganizationId] = useState(initial.organizationId || '');
+  const [permissions, setPermissions] = useState<string[]>(initial.permissions || []);
   const [error, setError] = useState<string | null>(
     initial.ok ? null : initial.message || 'Unable to load'
   );
   const [loading, setLoading] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const canAssign = permissions.includes('requests:assign');
+  const canUpdate =
+    permissions.includes('requests:update') ||
+    permissions.includes('requests:assign') ||
+    permissions.includes('requests:resolve');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -65,6 +83,7 @@ export function RequestsClient({ initial, clerkEnabled }: Props) {
       }
       setError(null);
       setOrganizationId(json.organizationId);
+      setPermissions(json.permissions || []);
       setRows(json.requests || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
@@ -77,6 +96,28 @@ export function RequestsClient({ initial, clerkEnabled }: Props) {
     if (!clerkEnabled) return;
     void refresh();
   }, [clerkEnabled, refresh, tenantEpoch]);
+
+  async function mutate(body: Record<string, unknown>) {
+    setBusyId(String(body.requestId || ''));
+    setError(null);
+    try {
+      const res = await fetch('/api/ops/requests', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        setError(json.message || 'Action failed');
+        return;
+      }
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Action failed');
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   if (!clerkEnabled) {
     return (
@@ -109,11 +150,13 @@ export function RequestsClient({ initial, clerkEnabled }: Props) {
       {error ? (
         <Card>
           <CardHeader>
-            <CardTitle>Unable to load queue</CardTitle>
+            <CardTitle>Notice</CardTitle>
             <CardDescription>{error}</CardDescription>
           </CardHeader>
         </Card>
-      ) : rows.length === 0 ? (
+      ) : null}
+
+      {!error && rows.length === 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>No open requests</CardTitle>
@@ -124,26 +167,65 @@ export function RequestsClient({ initial, clerkEnabled }: Props) {
         </Card>
       ) : (
         <div className="grid gap-3">
-          {rows.map(row => (
-            <Card key={row.id}>
-              <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-                <div>
-                  <CardTitle className="text-base">{row.title || row.id}</CardTitle>
-                  <CardDescription>
-                    {row.category || 'general'} · {formatTime(row.createdAt)}
-                    {row.workOrderId ? ` · WO ${row.workOrderId}` : ''}
-                  </CardDescription>
-                </div>
-                <div className="flex gap-2">
-                  <Badge variant="secondary">{row.priority || 'normal'}</Badge>
-                  <Badge>{row.status || 'submitted'}</Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="text-xs text-muted-foreground">
-                Assignee: {row.assignedUserId || 'Unassigned'}
-              </CardContent>
-            </Card>
-          ))}
+          {rows.map(row => {
+            const next = NEXT_STATUS[row.status || ''] || [];
+            return (
+              <Card key={row.id}>
+                <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+                  <div>
+                    <CardTitle className="text-base">{row.title || row.id}</CardTitle>
+                    <CardDescription>
+                      {row.category || 'general'} · {formatTime(row.createdAt)}
+                      {row.workOrderId ? ` · WO ${row.workOrderId}` : ''}
+                    </CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Badge variant="secondary">{row.priority || 'normal'}</Badge>
+                    <Badge>{row.status || 'submitted'}</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  <p className="text-xs text-muted-foreground">
+                    Assignee: {row.assignedUserId || 'Unassigned'}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {canAssign &&
+                    ['submitted', 'acknowledged', 'on_hold'].includes(row.status || '') ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busyId === row.id}
+                        onClick={() =>
+                          mutate({ requestId: row.id, action: 'assign' })
+                        }
+                      >
+                        Assign to me
+                      </Button>
+                    ) : null}
+                    {canUpdate
+                      ? next.map(status => (
+                          <Button
+                            key={status}
+                            size="sm"
+                            variant="outline"
+                            disabled={busyId === row.id}
+                            onClick={() =>
+                              mutate({
+                                requestId: row.id,
+                                action: 'status',
+                                status,
+                              })
+                            }
+                          >
+                            Mark {status}
+                          </Button>
+                        ))
+                      : null}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

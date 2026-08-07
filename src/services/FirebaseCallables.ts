@@ -2,13 +2,25 @@
  * Firebase callable bridge for new platform features.
  * New writes go through callables — do not grow Express for Operations/Community.
  *
- * Auth: prefers Firebase ID token from AuthService session when present.
+ * Auth bridge (transitional, SOS Express unchanged):
+ * 1. Existing Firebase Auth session
+ * 2. Stored custom token (`firebaseCustomToken`)
+ * 3. Clerk session token → issueFirebaseBridgeTokenCallable → custom token
+ * 4. Optional operator mint (emulator) via EXPO_PUBLIC_MOBILE_BRIDGE_MINT_SECRET
+ *
  * Tenant is stamped server-side from membership — never send organizationId.
  */
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFunctions, httpsCallable, connectFunctionsEmulator } from 'firebase/functions';
-import { getAuth, signInWithCustomToken } from 'firebase/auth';
+import {
+  getAuth,
+  signInWithCustomToken,
+  onAuthStateChanged,
+} from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { isMobileClerkPrepEnabled } from '../auth/clerkMobileConfig';
+
+const FIREBASE_CUSTOM_TOKEN_KEY = 'firebaseCustomToken';
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'demo',
@@ -41,20 +53,98 @@ function getFns() {
   return functions;
 }
 
-async function ensureFirebaseAuth(): Promise<void> {
+async function waitForAuthUser(timeoutMs = 4000): Promise<boolean> {
+  const auth = getAuth(getFirebaseApp());
+  if (auth.currentUser) return true;
+  return new Promise(resolve => {
+    const timer = setTimeout(() => {
+      unsub();
+      resolve(!!getAuth(getFirebaseApp()).currentUser);
+    }, timeoutMs);
+    const unsub = onAuthStateChanged(auth, user => {
+      if (user) {
+        clearTimeout(timer);
+        unsub();
+        resolve(true);
+      }
+    });
+  });
+}
+
+export async function persistFirebaseCustomToken(token: string): Promise<void> {
+  await AsyncStorage.setItem(FIREBASE_CUSTOM_TOKEN_KEY, token);
+}
+
+export async function clearFirebaseBridgeSession(): Promise<void> {
+  await AsyncStorage.removeItem(FIREBASE_CUSTOM_TOKEN_KEY);
+  try {
+    const auth = getAuth(getFirebaseApp());
+    await auth.signOut();
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Ensure Firebase Auth is ready for expansion callables.
+ * Does not replace Express SOS auth.
+ */
+export async function ensureFirebaseAuth(): Promise<void> {
   const auth = getAuth(getFirebaseApp());
   if (auth.currentUser) return;
 
-  // Optional custom token from session for dual-auth bridge
+  // Stored custom token from prior bridge mint
   try {
-    const raw = await AsyncStorage.getItem('firebaseCustomToken');
+    const raw = await AsyncStorage.getItem(FIREBASE_CUSTOM_TOKEN_KEY);
     if (raw) {
       await signInWithCustomToken(auth, raw);
+      if (auth.currentUser) return;
     }
   } catch {
-    // Callables may still accept Clerk bearer via rawRequest in some environments;
-    // without auth the callable will fail closed — surface to UI.
+    await AsyncStorage.removeItem(FIREBASE_CUSTOM_TOKEN_KEY);
   }
+
+  // Clerk prep: pass session token into bridge callable (no Firebase auth yet —
+  // callable resolves Clerk from data.clerkToken).
+  if (isMobileClerkPrepEnabled()) {
+    try {
+      const clerkToken = await AsyncStorage.getItem('clerkSessionToken');
+      if (clerkToken) {
+        const callable = httpsCallable(getFns(), 'issueFirebaseBridgeTokenCallable');
+        const result = await callable({ clerkToken, sessionToken: clerkToken });
+        const data = result.data as { customToken?: string };
+        if (data?.customToken) {
+          await persistFirebaseCustomToken(data.customToken);
+          await signInWithCustomToken(auth, data.customToken);
+          if (auth.currentUser) return;
+        }
+      }
+    } catch (err) {
+      console.warn('Clerk→Firebase bridge failed', err);
+    }
+  }
+
+  // Emulator / operator mint (never for production builds without explicit secret)
+  const operatorSecret = process.env.EXPO_PUBLIC_MOBILE_BRIDGE_MINT_SECRET;
+  const targetUid = process.env.EXPO_PUBLIC_MOBILE_BRIDGE_FIREBASE_UID;
+  if (operatorSecret && targetUid) {
+    const callable = httpsCallable(getFns(), 'issueFirebaseBridgeTokenCallable');
+    const result = await callable({
+      operatorSecret,
+      firebaseUid: targetUid,
+    });
+    const data = result.data as { customToken?: string };
+    if (data?.customToken) {
+      await persistFirebaseCustomToken(data.customToken);
+      await signInWithCustomToken(auth, data.customToken);
+      await waitForAuthUser();
+      if (auth.currentUser) return;
+    }
+  }
+
+  throw new Error(
+    'Organization features require a linked Firebase session. Sign in with an organization account (Clerk prep) or configure the Firebase bridge for this build.'
+  );
 }
 
 export async function callTenantCallable<TData = unknown, TResult = unknown>(
@@ -63,7 +153,18 @@ export async function callTenantCallable<TData = unknown, TResult = unknown>(
 ): Promise<TResult> {
   await ensureFirebaseAuth();
   const callable = httpsCallable(getFns(), name);
-  const result = await callable(data || {});
+  const payload: Record<string, unknown> = {
+    ...(data && typeof data === 'object' ? (data as Record<string, unknown>) : {}),
+  };
+  // Prefer Clerk token when prep is on — server stamps tenant from membership
+  if (isMobileClerkPrepEnabled()) {
+    const clerkToken = await AsyncStorage.getItem('clerkSessionToken');
+    if (clerkToken) {
+      payload.clerkToken = clerkToken;
+      payload.sessionToken = clerkToken;
+    }
+  }
+  const result = await callable(payload);
   return result.data as TResult;
 }
 

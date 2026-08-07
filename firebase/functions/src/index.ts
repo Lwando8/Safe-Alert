@@ -847,3 +847,28 @@ export const listAnalyticsEventsCallable = onCall(async req => {
     kind: req.data?.kind,
   });
 });
+
+/**
+ * Mobile / dual-auth bridge: mint Firebase custom token for expansion callables.
+ * Does not change Express SOS login. Clerk session or existing Firebase auth required
+ * (operator mint secret optional for emulator tooling).
+ */
+export const issueFirebaseBridgeTokenCallable = onCall(async req => {
+  let context: RequestContext | null = null;
+  try {
+    context = await resolveRequestContextFromCallable(req);
+  } catch {
+    context = null;
+  }
+
+  const firebaseUidFromAuth = req.auth?.uid || null;
+  const { issueFirebaseBridgeToken } = await import('./services/firebaseBridge');
+  return issueFirebaseBridgeToken({
+    context,
+    firebaseUidFromAuth,
+    operatorSecret:
+      typeof req.data?.operatorSecret === 'string' ? req.data.operatorSecret : undefined,
+    targetFirebaseUid:
+      typeof req.data?.firebaseUid === 'string' ? req.data.firebaseUid : undefined,
+  });
+});

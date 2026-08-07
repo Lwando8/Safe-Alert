@@ -45,8 +45,23 @@ Additive expansion of Seren SOS into one modular multi-tenant product:
 
 Access control / visitors / gates / biometrics / CCTV / payments / ERP / chat / AI dispatch.
 
+See also operator follow-ups: [`PLATFORM-EXPANSION-FOLLOWUPS.md`](./PLATFORM-EXPANSION-FOLLOWUPS.md).
+
 ## Isolation rules
 
 - Stamp `organizationId` from `RequestContext` only.
 - Module disabled → `failed-precondition`.
 - Firestore client rules remain deny for sensitive collections.
+
+## Follow-up status
+
+| Item | Status |
+|---|---|
+| Indexes for expansion collections | In `firestore.indexes.json` — deploy via `npm run firebase:deploy:firestore` |
+| Org backfill script | `npm run backfill:tenant-profiles` |
+| Expansion emulator probe | `npm run probe:expansion` |
+| Mobile Firebase bridge callable | `issueFirebaseBridgeTokenCallable` |
+| Ops request assign/status UI | `/ops/requests` PATCH |
+| FCM for ops/community/broadcast | `notifyOrgEvent` → `sendEachForMulticast` |
+| Module-gated ops nav + terminology | University layout |
+| Access control / SOS cutover / ERP | **Deferred** |

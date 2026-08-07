@@ -319,6 +319,144 @@ async function run() {
     { merge: true }
   );
 
+  // Expansion fixtures — requests / alerts / broadcasts (A vs B isolation)
+  await db.doc('operationalRequests/fixture_req_a').set(
+    {
+      id: 'fixture_req_a',
+      organizationId: 'university-a',
+      siteId: siteA,
+      zoneId: null,
+      reporterUserId: 'user_clerk_a_student',
+      category: 'plumbing',
+      title: 'Leaking tap — Building A',
+      description: 'Seed fixture request for University A',
+      status: 'submitted',
+      priority: 'normal',
+      location: null,
+      locationLabel: 'Building A',
+      attachments: [],
+      assignedTeamId: null,
+      assignedUserId: null,
+      workOrderId: null,
+      createdAt: now,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+  await db.doc('operationalRequests/fixture_req_b').set(
+    {
+      id: 'fixture_req_b',
+      organizationId: 'university-b',
+      siteId: siteB,
+      zoneId: null,
+      reporterUserId: 'user_clerk_b',
+      category: 'electrical',
+      title: 'Light out — Building B',
+      description: 'Seed fixture request for University B',
+      status: 'submitted',
+      priority: 'high',
+      location: null,
+      locationLabel: 'Building B',
+      attachments: [],
+      assignedTeamId: null,
+      assignedUserId: null,
+      workOrderId: null,
+      createdAt: now,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+
+  await db.doc('communityAlerts/fixture_alert_a').set(
+    {
+      id: 'fixture_alert_a',
+      organizationId: 'university-a',
+      siteId: siteA,
+      type: 'LOST_PROPERTY',
+      status: 'open',
+      title: 'Lost student card',
+      description: 'Seed community alert A',
+      reporterUserId: 'user_clerk_a_student',
+      contactMethod: null,
+      details: { item: 'student_card' },
+      createdAt: now,
+      updatedAt: now,
+      resolvedAt: null,
+    },
+    { merge: true }
+  );
+  await db.doc('communityAlerts/fixture_alert_b').set(
+    {
+      id: 'fixture_alert_b',
+      organizationId: 'university-b',
+      siteId: siteB,
+      type: 'NOTICE',
+      status: 'open',
+      title: 'Quiet hours reminder',
+      description: 'Seed community alert B',
+      reporterUserId: 'user_clerk_b',
+      contactMethod: null,
+      details: {},
+      createdAt: now,
+      updatedAt: now,
+      resolvedAt: null,
+    },
+    { merge: true }
+  );
+
+  await db.doc('communityGroups/fixture_group_a').set(
+    {
+      id: 'fixture_group_a',
+      organizationId: 'university-a',
+      siteId: siteA,
+      name: 'Residence A Neighbours',
+      description: 'Seed group',
+      category: 'residence',
+      visibility: 'organization',
+      status: 'active',
+      organiserUserIds: ['user_clerk_a'],
+      memberUserIds: ['user_clerk_a', 'user_clerk_a_student'],
+      createdAt: now,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+
+  await db.doc('broadcasts/fixture_broadcast_a').set(
+    {
+      id: 'fixture_broadcast_a',
+      organizationId: 'university-a',
+      siteId: siteA,
+      title: 'Campus notice A',
+      body: 'Official broadcast fixture for University A',
+      severity: 'info',
+      createdByUserId: 'user_clerk_a',
+      status: 'published',
+      publishedAt: now,
+      createdAt: now,
+      updatedAt: now,
+      channel: 'official_broadcast',
+    },
+    { merge: true }
+  );
+  await db.doc('broadcasts/fixture_broadcast_b').set(
+    {
+      id: 'fixture_broadcast_b',
+      organizationId: 'university-b',
+      siteId: siteB,
+      title: 'Campus notice B',
+      body: 'Official broadcast fixture for University B',
+      severity: 'warning',
+      createdByUserId: 'user_clerk_b',
+      status: 'published',
+      publishedAt: now,
+      createdAt: now,
+      updatedAt: now,
+      channel: 'official_broadcast',
+    },
+    { merge: true }
+  );
+
   console.log(
     JSON.stringify(
       {
@@ -326,6 +464,9 @@ async function run() {
         organizations: ['university-a', 'university-b'],
         sites: { 'university-a': siteA, 'university-b': siteB },
         incidents: ['fixture_inc_a', 'fixture_inc_b'],
+        operationalRequests: ['fixture_req_a', 'fixture_req_b'],
+        communityAlerts: ['fixture_alert_a', 'fixture_alert_b'],
+        broadcasts: ['fixture_broadcast_a', 'fixture_broadcast_b'],
         responderUnits: ['unit_a1', 'unit_b1'],
       },
       null,

@@ -208,7 +208,15 @@ export async function clearSession(): Promise<void> {
     ACTIVE_SHIFT_KEY,
     'isAuthenticated',
     'user',
+    'firebaseCustomToken',
+    'clerkSessionToken',
   ]);
+  try {
+    const { clearFirebaseBridgeSession } = await import('./FirebaseCallables');
+    await clearFirebaseBridgeSession();
+  } catch {
+    // Firebase may be unavailable in some test environments
+  }
 }
 
 export async function loadResponderProfile(): Promise<ResponderProfile | null> {

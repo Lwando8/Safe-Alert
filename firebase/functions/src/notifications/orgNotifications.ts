@@ -1,10 +1,11 @@
 import { getDb } from '../firebaseApps';
+import * as admin from 'firebase-admin';
 
 const db = getDb();
 
 /**
- * Lightweight org notification fan-out using existing orgDevices token layout.
- * Does not introduce a new FCM stack.
+ * Org notification fan-out using existing orgDevices token layout + FCM multicast.
+ * Queues outbox records for audit; sends via the same messaging path as incident_created.
  */
 export async function notifyOrgEvent(input: {
   organizationId: string;
@@ -14,11 +15,11 @@ export async function notifyOrgEvent(input: {
   data?: Record<string, string>;
   /** When set, prefer tokens belonging to this user; else org-wide. */
   targetUserId?: string;
-}): Promise<{ attempted: number }> {
+}): Promise<{ attempted: number; sent: number }> {
   try {
     const tokensSnap = await db
       .collection(`orgDevices/${input.organizationId}/tokens`)
-      .limit(200)
+      .limit(500)
       .get();
 
     const tokens: string[] = [];
@@ -29,12 +30,12 @@ export async function notifyOrgEvent(input: {
       tokens.push(String(data.token));
     }
 
-    if (!tokens.length) return { attempted: 0 };
+    if (!tokens.length) return { attempted: 0, sent: 0 };
 
-    // Persist notification records for audit; actual FCM send is best-effort via admin if available.
-    const batch = db.batch();
     const now = Date.now();
-    for (const token of tokens.slice(0, 50)) {
+    const batch = db.batch();
+    const slice = tokens.slice(0, 500);
+    for (const token of slice.slice(0, 50)) {
       const ref = db.collection('notificationOutbox').doc();
       batch.set(ref, {
         id: ref.id,
@@ -50,9 +51,30 @@ export async function notifyOrgEvent(input: {
       });
     }
     await batch.commit();
-    return { attempted: Math.min(tokens.length, 50) };
+
+    // Real FCM send — same stack as onIncidentCreatedNotify (no new provider)
+    let sent = 0;
+    try {
+      const response = await admin.messaging().sendEachForMulticast({
+        tokens: slice,
+        notification: {
+          title: input.title,
+          body: input.body,
+        },
+        data: {
+          organizationId: input.organizationId,
+          event: input.kind,
+          ...(input.data || {}),
+        },
+      });
+      sent = response.successCount;
+    } catch (err) {
+      console.error('notifyOrgEvent FCM send failed', err);
+    }
+
+    return { attempted: slice.length, sent };
   } catch (err) {
     console.error('notifyOrgEvent failed', err);
-    return { attempted: 0 };
+    return { attempted: 0, sent: 0 };
   }
 }

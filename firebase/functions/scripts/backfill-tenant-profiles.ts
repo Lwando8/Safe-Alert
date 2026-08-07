@@ -2,11 +2,15 @@
  * Backfill tenantProfile + default modules on existing organizations.
  * Additive only — never overwrites existing profile/module overrides.
  *
- * Usage:
- *   GCLOUD_PROJECT=seren-sos npx ts-node scripts/backfill-tenant-profiles.ts
- *   # or emulator:
+ * Usage (live):
+ *   GCLOUD_PROJECT=seren-sos npm run backfill:tenant-profiles
+ *
+ * Usage (emulator):
  *   FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren \
- *     npx ts-node scripts/backfill-tenant-profiles.ts
+ *     npm run backfill:tenant-profiles
+ *
+ * Safe to re-run: orgs that already have tenantProfile + settings.modules are skipped.
+ * Dry run: BACKFILL_DRY_RUN=1 npm run backfill:tenant-profiles
  */
 import * as admin from 'firebase-admin';
 import { buildOrganizationTenantDefaults } from '../src/services/tenantConfig';
@@ -20,6 +24,7 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 async function run() {
+  const dryRun = process.env.BACKFILL_DRY_RUN === '1' || process.env.BACKFILL_DRY_RUN === 'true';
   const defaults = buildOrganizationTenantDefaults('UNIVERSITY');
   const snap = await db.collection('organizations').get();
   let updated = 0;
@@ -37,6 +42,12 @@ async function run() {
 
     if (hasProfile && hasModules) {
       skipped += 1;
+      continue;
+    }
+
+    if (dryRun) {
+      console.log(`[dry-run] would backfill organization ${doc.id}`);
+      updated += 1;
       continue;
     }
 
@@ -60,7 +71,21 @@ async function run() {
     console.log(`Backfilled organization ${doc.id}`);
   }
 
-  console.log(JSON.stringify({ ok: true, scanned: snap.size, updated, skipped }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        dryRun,
+        projectId,
+        emulator: !!process.env.FIRESTORE_EMULATOR_HOST,
+        scanned: snap.size,
+        updated,
+        skipped,
+      },
+      null,
+      2
+    )
+  );
 }
 
 run().catch(err => {

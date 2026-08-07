@@ -30,10 +30,11 @@ Local IDE preview / port-forward is **non-blocking**. Focus here.
 ## Operator remaining
 
 1. Open the app via **Cursor Ports forward** (preferred) or an ephemeral public tunnel — **not** phone-`localhost` (access-path issue; VM Next server is healthy). See [`PHASE2B-ACCESS-PATH.md`](./PHASE2B-ACCESS-PATH.md).
-2. Walkthrough: University A ops → `/ops`, `/ops/incidents`, `/ops/responders`, `/ops/campus`; confirm University B absent; sign out clears data; platform account → `/platform/*`; ops account denied on `/platform/*`. Record **URL type only** (`cursor_port_forward` | `public_tunnel` | `vm_loopback`).
-3. Rotate shared test passwords after handoff. Do not commit tunnels, tickets, or secrets.
-4. Keep `ALLOW_FIREBASE_AUTH_FALLBACK` on until mobile device gate.
-5. Vercel dashboard: Root Directory = `apps/web`, then remove root `ignoreCommand`.
+2. Walkthrough: University A ops → `/ops`, `/ops/incidents`, `/ops/responders`, `/ops/campus`, `/ops/requests`, `/ops/community`, `/ops/broadcasts`, `/ops/analytics`; confirm University B absent; sign out clears data; platform account → `/platform/organizations` profile/modules; ops account denied on `/platform/*`. Record **URL type only** (`cursor_port_forward` | `public_tunnel` | `vm_loopback`).
+3. Deploy expansion indexes/rules + functions, then backfill tenant profiles — [`PLATFORM-EXPANSION-FOLLOWUPS.md`](./PLATFORM-EXPANSION-FOLLOWUPS.md).
+4. Rotate shared test passwords after handoff. Do not commit tunnels, tickets, or secrets.
+5. Keep `ALLOW_FIREBASE_AUTH_FALLBACK` on until mobile device gate.
+6. Vercel dashboard: Root Directory = `apps/web`, then remove root `ignoreCommand`.
 
 ## 1. Deploy Firebase Functions (Cloud Functions gen2 → Cloud Run)
 
