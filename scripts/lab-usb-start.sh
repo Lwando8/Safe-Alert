@@ -5,13 +5,16 @@
 # Usage (from repo root):
 #   ./scripts/lab-usb-start.sh
 #   ./scripts/lab-usb-start.sh --seed-clerk-user user_xxx
+#   npm run lab:usb
 #
 # Requires: adb device in "device" state, node, java (Firestore emulator), firebase-tools.
 # Do not use Expo tunnel for bridge testing — tunnel only carries the JS bundle.
+# For physical iPhone / no USB: npm run lab:lan
 
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT"
+# shellcheck disable=SC1091
+source "$(cd "$(dirname "$0")" && pwd)/lab-lib.sh"
+lab_root
 
 SEED_CLERK_USER=""
 while [[ $# -gt 0 ]]; do
@@ -21,7 +24,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     -h|--help)
-      sed -n '1,12p' "$0"
+      sed -n '1,14p' "$0"
       exit 0
       ;;
     *)
@@ -31,14 +34,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing: $1" >&2; exit 1; }; }
-need adb
-need node
-need npx
+lab_need adb
+lab_need node
+lab_need npx
+lab_need curl
+lab_need lsof
 
 if ! adb devices 2>/dev/null | awk 'NR>1 && $2=="device"{found=1} END{exit !found}'; then
   echo "No USB Android device (adb devices must show state=device)." >&2
-  echo "Enable USB debugging / file transfer, then re-run." >&2
+  echo "Enable USB debugging / file transfer, then re-run — or use: npm run lab:lan" >&2
   exit 1
 fi
 
@@ -52,103 +56,23 @@ ensure_reverse() {
   adb reverse --list
 }
 
-port_up() {
-  local port="$1"
-  lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
-}
-
-# Load functions env (Clerk / mint secrets) for the emulator process.
-if [[ -f firebase/functions/.env ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  . firebase/functions/.env
-  set +a
+if [[ -f .env.local.usb ]]; then
+  cp .env.local.usb .env.local
+  echo "Applied .env.local.usb → .env.local (127.0.0.1 hosts for adb reverse)"
+elif [[ -f .env.local ]] && ! grep -q '127\.0\.0\.1' .env.local; then
+  echo "WARN: .env.local does not look like USB (127.0.0.1). Copy .env.local.usb → .env.local for adb reverse." >&2
 fi
 
+lab_load_functions_env
 ensure_reverse
-
-if ! port_up 4000; then
-  echo "Starting Express SOS on :4000..."
-  (cd server && node index.js > /tmp/seren-express-sos.log 2>&1 &)
-  for _ in $(seq 1 20); do
-    port_up 4000 && break
-    sleep 0.25
-  done
-  curl -sf -m 3 http://127.0.0.1:4000/health >/dev/null || {
-    echo "Express failed to start — see /tmp/seren-express-sos.log" >&2
-    exit 1
-  }
-else
-  echo "Express already on :4000"
-fi
-
-if ! port_up 8080 || ! port_up 9099 || ! port_up 5001; then
-  if port_up 8080 || port_up 9099 || port_up 5001; then
-    echo "Partial emulator set detected — stopping orphans and restarting full set..."
-    # Firestore jar often survives after functions/auth die
-    pkill -f 'cloud-firestore-emulator' 2>/dev/null || true
-    pkill -f 'firebase emulators:start' 2>/dev/null || true
-    pkill -f 'cloud-firestore-emulator-v' 2>/dev/null || true
-    for _ in $(seq 1 20); do
-      if ! port_up 8080 && ! port_up 9099 && ! port_up 5001; then
-        break
-      fi
-      sleep 0.25
-    done
-    if port_up 8080 || port_up 9099 || port_up 5001; then
-      echo "Could not clear partial emulators. Free ports 8080/9099/5001 and re-run." >&2
-      exit 1
-    fi
-  fi
-  echo "Starting Firebase emulators (firestore,auth,functions) project=demo-seren..."
-  npx firebase emulators:start \
-    --only firestore,auth,functions \
-    --config firebase/firebase.json \
-    --project demo-seren \
-    > /tmp/seren-firebase-emulators.log 2>&1 &
-  for _ in $(seq 1 90); do
-    if port_up 8080 && port_up 9099 && port_up 5001; then
-      break
-    fi
-    sleep 1
-  done
-  if ! port_up 8080 || ! port_up 9099 || ! port_up 5001; then
-    echo "Emulators failed — see /tmp/seren-firebase-emulators.log" >&2
-    exit 1
-  fi
-else
-  echo "Firebase emulators already up"
-fi
-
-echo "Seeding phase2b tenants (emulator data wipes on restart)..."
-FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren \
-  npm --prefix firebase/functions run seed:phase2b
-
-if [[ -n "$SEED_CLERK_USER" ]]; then
-  echo "Seeding device membership for $SEED_CLERK_USER (SEED_ROLE=${SEED_ROLE:-student}, SEED_RESPONDER_TRACK=${SEED_RESPONDER_TRACK:-security})..."
-  FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren \
-    CLERK_USER_ID="$SEED_CLERK_USER" \
-    CLERK_USER_EMAIL="${CLERK_USER_EMAIL:-}" \
-    SEED_ROLE="${SEED_ROLE:-student}" \
-    SEED_RESPONDER_TRACK="${SEED_RESPONDER_TRACK:-security}" \
-    EXPRESS_UNIT_CODE="${EXPRESS_UNIT_CODE:-ALPHA-12}" \
-    node scripts/seed-device-clerk-membership.js
-fi
-
+lab_start_express
+lab_start_emulators
+lab_seed_phase2b
+lab_seed_clerk_user "$SEED_CLERK_USER"
 ensure_reverse
-
-if port_up 8081; then
-  echo "Metro already on :8081 — leave it running (prefer --localhost for USB)."
-else
-  echo "Starting Expo Go Metro on localhost:8081 (USB reverse)..."
-  echo "  Open on phone: exp://127.0.0.1:8081"
-  echo "  Env: .env.local should set EXPO_PUBLIC_* hosts to 127.0.0.1"
-  echo "  Avoid --tunnel for bridge testing."
-  exec npx expo start --go --localhost
-fi
 
 echo ""
-echo "Lab ready."
+echo "Lab ready (USB)."
 echo "  Express     http://127.0.0.1:4000"
 echo "  Functions   http://127.0.0.1:5001"
 echo "  Auth        http://127.0.0.1:9099"
@@ -156,3 +80,13 @@ echo "  Firestore   http://127.0.0.1:8080"
 echo "  Metro       http://127.0.0.1:8081  →  exp://127.0.0.1:8081"
 echo "  Clerk app   Seren SOS (real-guppy-12)"
 echo "  Logs        /tmp/seren-express-sos.log  /tmp/seren-firebase-emulators.log"
+echo "  Avoid --tunnel for bridge testing."
+echo ""
+
+if lab_port_up 8081; then
+  echo "Metro already on :8081 — leave it running (prefer --localhost for USB)."
+  exit 0
+fi
+
+echo "Starting Expo Go Metro on localhost:8081 (USB reverse)..."
+exec npx expo start --go --localhost --port 8081

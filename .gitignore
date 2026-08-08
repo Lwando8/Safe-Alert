@@ -43,6 +43,8 @@ yarn-error.*
 .env.*
 !.env.example
 !**/.env.example
+!.env.local.lan
+!.env.local.usb
 
 # typescript
 *.tsbuildinfo

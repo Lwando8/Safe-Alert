@@ -17,7 +17,7 @@ Do **not** point mobile/web keys at Seren SOS Platform (`expert-drake-16`).
 | Functions `.env` | Clerk keys for Seren SOS + matching mint / Express compat secrets |
 | Emulator project | `demo-seren` |
 | Deploy target (unchanged) | `seren-sos` |
-| Lab start | `npm run lab:usb` → Express + emulators + Expo `--localhost` + `adb reverse` |
+| Lab start | `npm run lab` (LAN/iPhone) or `npm run lab:usb` (Android USB) → Express + emulators + seed + Expo |
 
 Secrets are gitignored. Templates updated in `.env.example` and `firebase/functions/.env.example`.
 
@@ -176,6 +176,24 @@ Expo Go 54.x / Expo SDK 54 / RN 0.81.5 / `@clerk/expo` ^4.2.1 / Firebase JS ^11.
 | Sign back in | PASS — `unauthenticated` → `ready` + Express compat; same deviceId `25F84` → `active` again (no duplicate doc) |
 | Note | Post-logout toast `Location stream error Unauthorized` observed (SSE after session clear); does not block golden path |
 
+### iOS physical user evidence (2026-08-08 evening)
+
+Lab: Metro LAN `192.168.0.90:8081` + Express `:4000` + emulators on `0.0.0.0` (`demo-seren`).  
+Dev Client / Expo SDK 54. Canonical Clerk: **Seren SOS (`real-guppy-12`)**.
+
+| Step | Result |
+|------|--------|
+| Metro / Auth host | PASS — after `.env.local` LAN fix (was stale tether `172.21.*`) |
+| Clerk sign-in + device trust | PASS |
+| PlatformSession | PASS — `ready`, role `student`, `canUser: true` (Firestore membership seed required; Clerk orgs alone insufficient) |
+| Firebase bridge | PASS — `issueFirebaseBridgeTokenCallable` |
+| Express clerk-compat | PASS — `[ExpressClerkCompat] ready http://192.168.0.90:4000/auth/clerk-compat` |
+| Report Issue | PASS — operational request “Broken window” |
+| Community / My Services | PASS — list callables + `getMyServicesCallable` |
+| Kill/reopen | PASS — returns `ready` |
+| Sign out / sign in | PASS — `unauthenticated` → `ready` |
+| Express SOS | PASS — Express incidents `6fbc1734-…` (22:03), `9241481c-…` (22:08) for Clerk user; **not** mirrored to Firestore |
+
 ### Android user evidence (2026-08-08)
 
 | Step | Result |
@@ -193,16 +211,16 @@ Expo Go 54.x / Expo SDK 54 / RN 0.81.5 / `@clerk/expo` ^4.2.1 / Firebase JS ^11.
 
 ### Device lab checklist (manual)
 
-1. Copy `.env.example` → `.env`; set Clerk (Seren SOS) **or** bridge mint against `demo-seren`. USB: also `.env.local` with `127.0.0.1` hosts.  
-2. `npm run lab:usb` (or `./scripts/lab-usb-start.sh --seed-clerk-user user_…`). Prefer USB; avoid Expo tunnel for bridge.  
-3. Open `exp://127.0.0.1:8081` → login → PlatformSession `ready` (orgDevices row under `orgDevices/{org}/tokens`).  
+1. Copy `.env.example` → `.env`; set Clerk (Seren SOS / `real-guppy-12`).  
+2. `npm run lab` (iPhone/LAN) or `npm run lab:usb` (Android USB). Optional: `-- --seed-clerk-user user_…`. Avoid Expo tunnel for bridge.  
+3. Open `exp://<host>:8081` → login → PlatformSession `ready` (orgDevices row under `orgDevices/{org}/tokens`).  
 4. Report Issue → note `requestId`.  
 5. Ops web (Clerk org) assign → confirm push + WO id (dev client preferred for push).  
 6. Responder app → Work orders → complete → confirm same `workOrderId` / request resolved.  
 7. Logout → token `status=revoked`.  
 8. Express SOS on device: Home SOS (legacy path).  
 9. Confirm ops Firestore incidents **do not** receive Express SOS ids (split-brain still expected).  
-10. After every emulator restart: `seed:phase2b` (+ device Clerk membership seed).
+10. After every emulator restart: lab scripts re-seed phase2b; pass `--seed-clerk-user` for device membership.
 
 ### Native blockers
 
@@ -224,11 +242,13 @@ Express SOS remains the accepted legacy emergency path. Golden-path automation c
 ## How to re-run
 
 ```bash
-# Preferred USB lab (one script)
-npm run lab:usb
-# After Clerk sign-in, if membership missing:
-./scripts/lab-usb-start.sh --seed-clerk-user user_xxx
-# Or separately:
+# Preferred one-command labs
+npm run lab                                          # LAN / iPhone
+npm run lab -- --seed-clerk-user user_xxx
+npm run lab:usb                                      # Android USB + adb reverse
+npm run lab:usb -- --seed-clerk-user user_xxx
+
+# Or membership seed alone:
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren \
   CLERK_USER_ID=user_xxx node scripts/seed-device-clerk-membership.js
 

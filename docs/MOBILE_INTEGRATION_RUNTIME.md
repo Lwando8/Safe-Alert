@@ -9,32 +9,30 @@
 **Seren SOS** (`real-guppy-12`) — publishable/secret keys for mobile Expo and ops web.  
 **Not** Seren SOS Platform (`expert-drake-16`).
 
-### USB device lab (preferred for Android)
+### One-command device labs
+
+Shared helpers: `scripts/lab-lib.sh`.  
+**Avoid Expo `--tunnel` for bridge testing** — tunnel only carries the JS bundle; Functions/Auth stay unreachable unless also exposed.
+
+| Command | When | What it does |
+|---------|------|----------------|
+| `npm run lab` / `npm run lab:lan` | Physical iPhone, or Android on same Wi‑Fi | Detects LAN IP → writes `.env.local` hosts → Express + emulators → `seed:phase2b` → optional Clerk membership → Expo `--lan` |
+| `npm run lab:usb` | Android USB debugging | Applies `.env.local.usb` → `adb reverse` → same stack → Expo `--localhost` |
 
 ```bash
+# iPhone / LAN (preferred when no USB reverse)
+npm run lab
+npm run lab -- --seed-clerk-user user_xxx
+LAB_LAN_IP=192.168.0.90 npm run lab -- --clear
+
+# Android USB
 npm run lab:usb
-# or: ./scripts/lab-usb-start.sh --seed-clerk-user user_xxx
+npm run lab:usb -- --seed-clerk-user user_xxx
 ```
 
-Starts Express `:4000`, Firebase emulators (`demo-seren` firestore/auth/functions), re-seeds phase2b, applies `adb reverse` for `4000/5001/8080/8081/9099`, then Expo `--go --localhost`. Open `exp://127.0.0.1:8081`.
+Templates: `.env.local.lan`, `.env.local.usb`. Do **not** mix USB `.env.local` (`127.0.0.1`) with a physical iPhone — Expo will report “cannot connect to the server”.
 
-Put USB host overrides in gitignored `.env.local` (`127.0.0.1`) — template: `.env.local.usb`. **Avoid Expo `--tunnel` for bridge testing** — tunnel only carries the JS bundle; Functions/Auth stay unreachable unless also exposed.
-
-### Physical iPhone / LAN lab (no adb reverse)
-
-iPhone cannot use `127.0.0.1` → Mac. Use the Mac Wi‑Fi IP (e.g. `192.168.0.90`):
-
-1. Set `.env.local` API/Functions/Auth hosts to `http://<LAN-IP>:…` (see current `.env` / LAN example). Keep a USB copy as `.env.local.usb`.
-2. Restart Metro **without** `--localhost` so the packager is reachable on the LAN:
-   ```bash
-   npx expo start --go
-   ```
-3. On the phone (same Wi‑Fi): open `exp://<LAN-IP>:8081`.
-4. Confirm Mac firewall allows inbound on `4000/5001/8080/8081/9099`.
-
-Do **not** mix USB `.env.local` (`127.0.0.1`) with a physical iPhone — Expo will report “cannot connect to the server”.
-
-After every emulator restart, data is wiped — always re-run `seed:phase2b` and the device Clerk membership seed.
+After every emulator restart, data is wiped — the lab scripts re-run `seed:phase2b`; pass `--seed-clerk-user` for the real Clerk `user_…` membership.
 
 ---
 

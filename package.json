@@ -25,6 +25,8 @@
     "server": "echo \"Local Node server is deprecated for Firebase features; Express SOS regression: cd server && node index.js\"",
     "probe:golden-path": "npm run probe:golden-path --prefix firebase/functions",
     "regress:express-sos": "node scripts/express-sos-regression.js",
+    "lab": "bash scripts/lab-lan-start.sh",
+    "lab:lan": "bash scripts/lab-lan-start.sh",
     "lab:usb": "bash scripts/lab-usb-start.sh",
     "firebase:emulators": "firebase emulators:start --config firebase/firebase.json",
     "firebase:functions:build": "npm --prefix firebase/functions run build",
