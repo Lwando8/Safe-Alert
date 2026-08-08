@@ -36,10 +36,11 @@ After every emulator restart, data is wiped — the lab scripts re-run `seed:pha
 
 ### Platform member attach (preferred over hand-seed for students)
 
-Platform admin → **Organizations → [org] → Members**: attach an existing Clerk user (`user_…` or email).  
+Platform admin → **Organizations → [org] → Members**:
 
-- **Live org** (`clerkOrganizationId` is a real Clerk org): creates/updates Clerk org membership, then writes Firestore. Use **Sync from Clerk** to pull the full Clerk membership list into Firestore after drift or missed webhooks.  
-- **Lab / emulator org** (synthetic `org_clerk_*` or missing Clerk id): Firestore-only membership while `FIRESTORE_EMULATOR_HOST` is set — replaces `scripts/seed-device-clerk-membership.js` for the **student** golden path.  
+- **Attach** — existing Clerk `user_…` or email → Firestore membership (and Clerk org membership when live).  
+- **Invite** — new email: live org sends Clerk organization invitation; lab/emulator creates Clerk user + Firestore membership (temporary password shown once). Existing emails fall through to Attach.  
+- **Sync from Clerk** — live orgs only; pulls full Clerk membership list into Firestore after drift/missed webhooks.  
 
 Responder unit / lab WO seeding still uses `--seed-clerk-user` with `SEED_ROLE=responder`. Actor needs `public_metadata.platformAdmin=true`. Web must use Seren SOS keys and point Admin SDK at the emulator for lab.
 

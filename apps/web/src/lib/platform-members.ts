@@ -537,3 +537,196 @@ export async function syncPlatformOrganizationMembersFromClerk(organizationId: s
     };
   }
 }
+
+function looksLikeEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+/**
+ * Invite a new email into the org (live Clerk) or create+attach in lab emulator mode.
+ * If the Clerk user already exists, falls through to attach.
+ */
+export async function invitePlatformOrganizationMember(input: {
+  organizationId: string;
+  email: string;
+  role?: string;
+  redirectUrl?: string;
+}): Promise<
+  | {
+      ok: true;
+      mode: 'org_invitation' | 'created+attached' | 'attached_existing';
+      email: string;
+      clerkRole: string;
+      invitationId?: string;
+      userId?: string;
+      membershipId?: string;
+      temporaryPassword?: string;
+      note?: string;
+    }
+  | { ok: false; code: string; message: string }
+> {
+  const gate = await assertPlatformAdminSession();
+  if (!gate.ok) return gate;
+
+  const email = input.email.trim().toLowerCase();
+  if (!looksLikeEmail(email)) {
+    return { ok: false, code: 'invalid', message: 'Provide a valid email address.' };
+  }
+
+  const roleRaw = (input.role || 'org:student').trim();
+  if (!isAttachableClerkRole(roleRaw)) {
+    return {
+      ok: false,
+      code: 'invalid',
+      message: `Role must be one of: org:student, org:staff, org:admin, org:member.`,
+    };
+  }
+  const clerkRole: AttachableClerkRole = roleRaw;
+  const clerkInviteRole = clerkRole === 'org:member' ? 'org:member' : clerkRole;
+
+  // Existing user → attach
+  const existing = await resolveClerkUserId(email);
+  if (existing.ok) {
+    const attached = await attachPlatformOrganizationMember({
+      organizationId: input.organizationId,
+      userRef: existing.userId,
+      role: clerkRole,
+    });
+    if (!attached.ok) return attached;
+    return {
+      ok: true,
+      mode: 'attached_existing',
+      email,
+      clerkRole: attached.clerkRole,
+      userId: attached.userId,
+      membershipId: attached.membershipId,
+      note: 'User already existed in Clerk — attached membership.',
+    };
+  }
+  if (existing.code !== 'not_found') {
+    return existing;
+  }
+
+  try {
+    const db = getAdminDb();
+    const orgSnap = await db.doc(`organizations/${input.organizationId}`).get();
+    if (!orgSnap.exists) {
+      return { ok: false, code: 'not_found', message: 'Organization not found.' };
+    }
+    const org = orgSnap.data() as {
+      id?: string;
+      clerkOrganizationId?: string;
+      name?: string;
+    };
+    const firestoreOrgId = String(org.id || input.organizationId);
+    const clerkOrganizationId = org.clerkOrganizationId
+      ? String(org.clerkOrganizationId)
+      : '';
+    const live = isLiveClerkOrganizationId(clerkOrganizationId);
+    const emulator = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
+
+    if (live) {
+      const client = await clerkClient();
+      const redirectUrl =
+        input.redirectUrl ||
+        process.env.NEXT_PUBLIC_PLATFORM_INVITE_REDIRECT_URL ||
+        'http://127.0.0.1:3000/sign-in';
+      try {
+        const invitation = await client.organizations.createOrganizationInvitation({
+          organizationId: clerkOrganizationId,
+          emailAddress: email,
+          role: clerkInviteRole,
+          redirectUrl,
+        });
+        return {
+          ok: true,
+          mode: 'org_invitation',
+          email,
+          clerkRole,
+          invitationId: invitation.id,
+          note:
+            'Clerk org invitation sent. After they accept, use Sync from Clerk (or wait for webhook) to materialize Firestore membership.',
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          ok: false,
+          code: 'unavailable',
+          message: `Clerk org invitation failed: ${msg}`,
+        };
+      }
+    }
+
+    if (!emulator) {
+      return {
+        ok: false,
+        code: 'failed_precondition',
+        message:
+          'Cannot invite to a lab/synthetic org outside the Firebase emulator. Set a live clerkOrganizationId, or run with FIRESTORE_EMULATOR_HOST.',
+      };
+    }
+
+    // Lab: create Clerk user + Firestore membership immediately (no org invitation target).
+    const client = await clerkClient();
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    let temporaryPassword = 'SerenLab!';
+    for (let i = 0; i < 10; i++) {
+      temporaryPassword += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+
+    let userId = '';
+    try {
+      const created = await client.users.createUser({
+        emailAddress: [email],
+        password: temporaryPassword,
+        skipPasswordChecks: true,
+        firstName: email.split('@')[0] || 'Member',
+        publicMetadata: {},
+      });
+      userId = created.id;
+      try {
+        await client.users.updateUser(userId, { createOrganizationEnabled: false });
+      } catch {
+        // optional
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        ok: false,
+        code: 'unavailable',
+        message: `Clerk user create failed: ${msg}`,
+      };
+    }
+
+    const attached = await attachPlatformOrganizationMember({
+      organizationId: firestoreOrgId,
+      userRef: userId,
+      role: clerkRole,
+    });
+    if (!attached.ok) {
+      return {
+        ok: false,
+        code: attached.code,
+        message: `User created (${userId}) but attach failed: ${attached.message}`,
+      };
+    }
+
+    return {
+      ok: true,
+      mode: 'created+attached',
+      email,
+      clerkRole: attached.clerkRole,
+      userId: attached.userId,
+      membershipId: attached.membershipId,
+      temporaryPassword,
+      note: 'Lab user created with temporary password and Firestore membership. Share the password securely; change after first sign-in.',
+    };
+  } catch (err) {
+    console.error('invitePlatformOrganizationMember failed', err);
+    return {
+      ok: false,
+      code: 'unavailable',
+      message: err instanceof Error ? err.message : 'Unable to invite member.',
+    };
+  }
+}

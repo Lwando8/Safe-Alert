@@ -97,6 +97,7 @@ export function OrganizationSettingsClient({ orgId, initial }: Props) {
   const [attaching, setAttaching] = useState(false);
   const [attachMsg, setAttachMsg] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [inviting, setInviting] = useState(false);
 
   const loadMembers = useCallback(async () => {
     setMembersLoading(true);
@@ -206,6 +207,42 @@ export function OrganizationSettingsClient({ orgId, initial }: Props) {
     }
   }
 
+  async function inviteMember() {
+    setInviting(true);
+    setAttachMsg(null);
+    setMembersError(null);
+    try {
+      const res = await fetch(`/api/platform/organizations/${orgId}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'invite', email: userRef, role: attachRole }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        setMembersError(json.message || 'Invite failed');
+        return;
+      }
+      const parts = [
+        `Invite ${json.mode}`,
+        json.email,
+        json.clerkRole,
+        json.userId ? `user ${json.userId}` : null,
+        json.invitationId ? `invitation ${json.invitationId}` : null,
+        json.temporaryPassword ? `temp password: ${json.temporaryPassword}` : null,
+        json.note || null,
+      ].filter(Boolean);
+      setAttachMsg(parts.join(' — '));
+      if (json.mode !== 'org_invitation') {
+        setUserRef('');
+      }
+      await loadMembers();
+    } catch (err) {
+      setMembersError(err instanceof Error ? err.message : 'Invite failed');
+    } finally {
+      setInviting(false);
+    }
+  }
+
   if (!org) {
     return (
       <Card>
@@ -247,19 +284,18 @@ export function OrganizationSettingsClient({ orgId, initial }: Props) {
         <CardHeader>
           <CardTitle>Members</CardTitle>
           <CardDescription>
-            Attach an existing Clerk user and sync a Firestore membership (server-authoritative
-            for mobile PlatformSession). Student path replaces hand-running the device seed
-            script.
+            Attach an existing Clerk user, invite a new email, or sync Clerk→Firestore.
+            Memberships are server-authoritative for mobile PlatformSession.
             {labMode
-              ? ' Lab mode: org has no live Clerk organization id — writes Firestore only while the emulator is connected.'
-              : ' Live mode: creates/updates the Clerk org membership, then syncs Firestore.'}
+              ? ' Lab mode: Invite creates a Clerk user + Firestore membership (shows a temporary password). Attach also writes Firestore only.'
+              : ' Live mode: Invite sends a Clerk organization invitation; after accept, Sync from Clerk (or webhook) materializes Firestore.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto_auto]">
             <input
               className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              placeholder="Clerk user id (user_…) or email"
+              placeholder="Email or Clerk user id (user_…)"
               value={userRef}
               onChange={e => setUserRef(e.target.value)}
               autoComplete="off"
@@ -275,8 +311,16 @@ export function OrganizationSettingsClient({ orgId, initial }: Props) {
                 </option>
               ))}
             </select>
-            <Button onClick={attachMember} disabled={attaching || !userRef.trim()}>
-              {attaching ? 'Attaching…' : 'Attach member'}
+            <Button onClick={attachMember} disabled={attaching || inviting || !userRef.trim()}>
+              {attaching ? 'Attaching…' : 'Attach'}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => void inviteMember()}
+              disabled={attaching || inviting || !userRef.trim()}
+              title="Invite new email (or attach if they already exist)"
+            >
+              {inviting ? 'Inviting…' : 'Invite'}
             </Button>
           </div>
           {attachMsg ? <p className="text-sm text-green-600">{attachMsg}</p> : null}

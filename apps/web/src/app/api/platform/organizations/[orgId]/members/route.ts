@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import {
   attachPlatformOrganizationMember,
+  invitePlatformOrganizationMember,
   listPlatformOrganizationMembers,
   syncPlatformOrganizationMembersFromClerk,
 } from '@/lib/platform-members';
@@ -37,7 +38,7 @@ export async function GET(_request: Request, { params }: Params) {
 
 export async function POST(request: Request, { params }: Params) {
   const { orgId } = await params;
-  let body: { action?: string; userRef?: string; role?: string } = {};
+  let body: { action?: string; userRef?: string; email?: string; role?: string } = {};
   try {
     body = await request.json();
   } catch {
@@ -49,6 +50,18 @@ export async function POST(request: Request, { params }: Params) {
 
   if (body.action === 'sync') {
     const result = await syncPlatformOrganizationMembersFromClerk(orgId);
+    if (!result.ok) {
+      return NextResponse.json(result, { status: statusFor(result.code) });
+    }
+    return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } });
+  }
+
+  if (body.action === 'invite') {
+    const result = await invitePlatformOrganizationMember({
+      organizationId: orgId,
+      email: String(body.email || body.userRef || ''),
+      role: body.role,
+    });
     if (!result.ok) {
       return NextResponse.json(result, { status: statusFor(result.code) });
     }
