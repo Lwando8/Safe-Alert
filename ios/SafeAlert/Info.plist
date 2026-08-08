@@ -27,6 +27,7 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
+          <string>safealert</string>
           <string>com.lwandonova.safetyalertapp</string>
         </array>
       </dict>
@@ -39,6 +40,8 @@
     </array>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <key>ClerkExpoVersion</key>
+    <string>4.2.1</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>LSMinimumSystemVersion</key>
@@ -52,12 +55,37 @@
       <key>NSAllowsLocalNetworking</key>
       <true/>
     </dict>
+    <key>NSCameraUsageDescription</key>
+    <string>Safe Alert may use the camera to capture evidence during emergency situations.</string>
+    <key>NSContactsUsageDescription</key>
+    <string>Safe Alert needs access to your contacts to help you quickly add emergency contacts for critical safety notifications.</string>
+    <key>NSFaceIDUsageDescription</key>
+    <string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to use your location.</string>
+    <string>Safe Alert needs location access to provide emergency services with your exact location during critical situations.</string>
     <key>NSLocationAlwaysUsageDescription</key>
-    <string>This app uses location services to provide emergency alerts and share your location with emergency contacts even when the app is in the background.</string>
+    <string>Safe Alert needs background location access for continuous safety monitoring and emergency location sharing.</string>
+    <key>NSLocationTemporaryUsageDescriptionDictionary</key>
+    <dict>
+      <key>EmergencyLocation</key>
+      <string>Safe Alert needs temporary access to your location to send emergency alerts with your current position to first responders and emergency contacts.</string>
+    </dict>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>This app uses location services to provide emergency alerts and share your location with emergency contacts.</string>
+    <string>Safe Alert needs location access to provide emergency services with your exact location during critical situations.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Safe Alert may record audio during emergency situations for evidence and to help emergency responders understand the situation.</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>Allow $(PRODUCT_NAME) to save photos</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Safe Alert may save emergency evidence to your photo library for documentation purposes.</string>
+    <key>NSUserNotificationsUsageDescription</key>
+    <string>Safe Alert sends critical emergency notifications to alert your emergency contacts when you need help. These notifications bypass Do Not Disturb for emergency situations.</string>
+    <key>RCTNewArchEnabled</key>
+    <true/>
+    <key>UIBackgroundModes</key>
+    <array>
+      <string>location</string>
+    </array>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
     <key>UIRequiredDeviceCapabilities</key>

@@ -79,9 +79,6 @@
         {
           "icon": "./assets/icon.png",
           "color": "#e74c3c",
-          "sounds": [
-            "./assets/emergency-alert.wav"
-          ],
           "mode": "production"
         }
       ],
