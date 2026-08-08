@@ -7,13 +7,22 @@ import {
 // Minimal pure helpers tested here — implementation lives beside service.
 
 describe('work order status machine (shared with operational requests)', () => {
-  it('allows assigned → in_progress and rejects closed → assigned', () => {
+  it('allows assigned → acknowledged (responder Accept) and assigned → in_progress', () => {
+    expect(canTransitionWorkOrder('assigned', 'acknowledged')).toBe(true);
     expect(canTransitionWorkOrder('assigned', 'in_progress')).toBe(true);
     expect(canTransitionWorkOrder('closed', 'assigned')).toBe(false);
   });
 
+  it('allows acknowledged → in_progress (Start work after Accept)', () => {
+    expect(canTransitionWorkOrder('acknowledged', 'in_progress')).toBe(true);
+  });
+
   it('keeps resolved → closed only', () => {
     expect(ALLOWED_TRANSITIONS_FOR_TEST.resolved).toEqual(['closed']);
+  });
+
+  it('assigned transitions include acknowledged for create-on-assign accept', () => {
+    expect(ALLOWED_TRANSITIONS_FOR_TEST.assigned).toContain('acknowledged');
   });
 });
 

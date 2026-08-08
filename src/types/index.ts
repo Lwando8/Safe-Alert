@@ -1,3 +1,5 @@
+import type { NavigatorScreenParams } from '@react-navigation/native';
+
 export interface SafetyReport {
   id: string;
   type: IncidentType;
@@ -76,13 +78,6 @@ export type {
 } from './dispatch';
 
 // Navigation types
-export type RootStackParamList = {
-  Auth: undefined;
-  Main: undefined;
-  Responder: undefined;
-  Admin: undefined;
-};
-
 export type ResponderStackParamList = {
   ResponderShiftStart: undefined;
   ResponderMap: undefined;
@@ -90,6 +85,13 @@ export type ResponderStackParamList = {
   ResponderAlertDetail: { alertId: string };
   ResponderWorkOrders: undefined;
   ResponderWorkOrderDetail: { workOrderId: string };
+};
+
+export type RootStackParamList = {
+  Auth: undefined;
+  Main: undefined;
+  Responder: NavigatorScreenParams<ResponderStackParamList> | undefined;
+  Admin: undefined;
 };
 
 export type AdminStackParamList = {

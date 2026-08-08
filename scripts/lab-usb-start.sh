@@ -84,8 +84,21 @@ fi
 
 if ! port_up 8080 || ! port_up 9099 || ! port_up 5001; then
   if port_up 8080 || port_up 9099 || port_up 5001; then
-    echo "Partial emulator set detected; stop existing Firebase emulators and re-run." >&2
-    exit 1
+    echo "Partial emulator set detected — stopping orphans and restarting full set..."
+    # Firestore jar often survives after functions/auth die
+    pkill -f 'cloud-firestore-emulator' 2>/dev/null || true
+    pkill -f 'firebase emulators:start' 2>/dev/null || true
+    pkill -f 'cloud-firestore-emulator-v' 2>/dev/null || true
+    for _ in $(seq 1 20); do
+      if ! port_up 8080 && ! port_up 9099 && ! port_up 5001; then
+        break
+      fi
+      sleep 0.25
+    done
+    if port_up 8080 || port_up 9099 || port_up 5001; then
+      echo "Could not clear partial emulators. Free ports 8080/9099/5001 and re-run." >&2
+      exit 1
+    fi
   fi
   echo "Starting Firebase emulators (firestore,auth,functions) project=demo-seren..."
   npx firebase emulators:start \
@@ -112,9 +125,13 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren \
   npm --prefix firebase/functions run seed:phase2b
 
 if [[ -n "$SEED_CLERK_USER" ]]; then
-  echo "Seeding device membership for $SEED_CLERK_USER..."
+  echo "Seeding device membership for $SEED_CLERK_USER (SEED_ROLE=${SEED_ROLE:-student}, SEED_RESPONDER_TRACK=${SEED_RESPONDER_TRACK:-hybrid})..."
   FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren \
     CLERK_USER_ID="$SEED_CLERK_USER" \
+    CLERK_USER_EMAIL="${CLERK_USER_EMAIL:-}" \
+    SEED_ROLE="${SEED_ROLE:-student}" \
+    SEED_RESPONDER_TRACK="${SEED_RESPONDER_TRACK:-hybrid}" \
+    EXPRESS_UNIT_CODE="${EXPRESS_UNIT_CODE:-ALPHA-12}" \
     node scripts/seed-device-clerk-membership.js
 fi
 

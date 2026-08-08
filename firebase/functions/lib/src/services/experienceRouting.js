@@ -45,7 +45,11 @@ function canUseUserExperience(input) {
 }
 /**
  * Deterministic experience selection for dual-capable members.
- * Prefer last valid experience → responder if capable → user.
+ *
+ * When PlatformSession carries an authoritative unitId, prefer the responder
+ * shell even if a prior citizen session left lastExperience=user — otherwise
+ * the user compat path clears ResponderProfile while the responder navigator
+ * is mounting ("session could not be loaded").
  */
 function resolveMobileExperience(input) {
     const status = input.membershipStatus || 'active';
@@ -61,10 +65,12 @@ function resolveMobileExperience(input) {
         return 'responder';
     if (userOk && !responderOk)
         return 'user';
-    // Both
+    // Dual-capable: unit-backed responders always open the responder shell.
+    if (responderOk && String(input.unitId || '').trim()) {
+        return 'responder';
+    }
     if (input.lastExperience === 'responder' || input.lastExperience === 'user') {
         return input.lastExperience;
     }
-    // Prefer responder when dual-capable (ops urgency); product can change later.
     return 'responder';
 }

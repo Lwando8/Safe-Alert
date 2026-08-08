@@ -28,7 +28,7 @@ describe('mobile experience routing', () => {
     ).toBe('responder');
   });
 
-  it('dual-capable prefers last experience then responder', () => {
+  it('dual-capable without unitId prefers last experience then responder', () => {
     const both = {
       membershipStatus: 'active' as const,
       role: 'security_guard',
@@ -38,6 +38,19 @@ describe('mobile experience routing', () => {
     expect(resolveMobileExperience({ ...both, lastExperience: 'user' })).toBe('user');
     expect(resolveMobileExperience({ ...both, lastExperience: 'responder' })).toBe('responder');
     expect(resolveMobileExperience(both)).toBe('responder');
+  });
+
+  it('dual-capable with unitId prefers responder over stale lastExperience=user', () => {
+    expect(
+      resolveMobileExperience({
+        membershipStatus: 'active',
+        role: 'security_guard',
+        permissions: ['incidents:acknowledge'],
+        capabilities: ['INCIDENT_RESPONSE'],
+        unitId: 'ALPHA-12',
+        lastExperience: 'user',
+      })
+    ).toBe('responder');
   });
 
   it('pending / revoked yield none', () => {

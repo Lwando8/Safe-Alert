@@ -66,6 +66,12 @@ export function resolveMobileExperience(input: ExperienceRoutingInput): MobileEx
   if (responderOk && !userOk) return 'responder';
   if (userOk && !responderOk) return 'user';
 
+  // Dual-capable: unit-backed responders always open the responder shell.
+  // Stale lastExperience=user must not clear ResponderProfile via user compat.
+  if (responderOk && String(input.unitId || '').trim()) {
+    return 'responder';
+  }
+
   if (input.lastExperience === 'responder' || input.lastExperience === 'user') {
     return input.lastExperience;
   }

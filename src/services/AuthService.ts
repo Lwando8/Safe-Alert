@@ -245,6 +245,15 @@ export async function loadResponderProfile(): Promise<ResponderProfile | null> {
   return raw ? JSON.parse(raw) : null;
 }
 
+/** Persist legacy ResponderProfile shape used by ResponderNavigator. */
+export async function saveResponderProfile(profile: ResponderProfile): Promise<void> {
+  await AsyncStorage.setItem(RESPONDER_PROFILE_KEY, JSON.stringify(profile));
+}
+
+export async function clearResponderProfile(): Promise<void> {
+  await AsyncStorage.removeItem(RESPONDER_PROFILE_KEY);
+}
+
 export async function loadActiveShift(): Promise<ShiftSession | null> {
   const raw = await AsyncStorage.getItem(ACTIVE_SHIFT_KEY);
   return raw ? JSON.parse(raw) : null;

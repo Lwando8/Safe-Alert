@@ -15,33 +15,18 @@ import { notifyOrgEvent } from '../notifications/orgNotifications';
 import { authorizeAction } from '../policy/authorizeAction';
 import { assertUniversityModuleAccess } from '../services/universityEntitlements';
 import { ensurePersonForClerkUser } from '../services/personService';
+import {
+  ALLOWED_TRANSITIONS,
+  isOperationalRequestStatus,
+  type OperationalRequestStatus,
+} from './workOrderTransitions';
 
 const db = getDb();
 
-export type OperationalRequestStatus =
-  | 'submitted'
-  | 'acknowledged'
-  | 'assigned'
-  | 'in_progress'
-  | 'awaiting_information'
-  | 'on_hold'
-  | 'resolved'
-  | 'closed';
-
-const ALLOWED_TRANSITIONS: Record<OperationalRequestStatus, OperationalRequestStatus[]> = {
-  submitted: ['acknowledged', 'assigned', 'closed'],
-  acknowledged: ['assigned', 'awaiting_information', 'on_hold', 'closed'],
-  // Responder "Accept" on a create-on-assign work order: assigned → acknowledged
-  assigned: ['acknowledged', 'in_progress', 'awaiting_information', 'on_hold', 'closed'],
-  in_progress: ['awaiting_information', 'on_hold', 'resolved', 'closed'],
-  awaiting_information: ['in_progress', 'on_hold', 'assigned', 'closed'],
-  on_hold: ['in_progress', 'assigned', 'awaiting_information', 'closed'],
-  resolved: ['closed'],
-  closed: [],
-};
+export type { OperationalRequestStatus };
 
 function isStatus(value: unknown): value is OperationalRequestStatus {
-  return typeof value === 'string' && value in ALLOWED_TRANSITIONS;
+  return isOperationalRequestStatus(value);
 }
 
 async function appendTimeline(

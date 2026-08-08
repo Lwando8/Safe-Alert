@@ -52,20 +52,10 @@ const orgNotifications_1 = require("../notifications/orgNotifications");
 const authorizeAction_1 = require("../policy/authorizeAction");
 const universityEntitlements_1 = require("../services/universityEntitlements");
 const personService_1 = require("../services/personService");
+const workOrderTransitions_1 = require("./workOrderTransitions");
 const db = (0, firebaseApps_1.getDb)();
-const ALLOWED_TRANSITIONS = {
-    submitted: ['acknowledged', 'assigned', 'closed'],
-    acknowledged: ['assigned', 'awaiting_information', 'on_hold', 'closed'],
-    // Responder "Accept" on a create-on-assign work order: assigned → acknowledged
-    assigned: ['acknowledged', 'in_progress', 'awaiting_information', 'on_hold', 'closed'],
-    in_progress: ['awaiting_information', 'on_hold', 'resolved', 'closed'],
-    awaiting_information: ['in_progress', 'on_hold', 'assigned', 'closed'],
-    on_hold: ['in_progress', 'assigned', 'awaiting_information', 'closed'],
-    resolved: ['closed'],
-    closed: [],
-};
 function isStatus(value) {
-    return typeof value === 'string' && value in ALLOWED_TRANSITIONS;
+    return (0, workOrderTransitions_1.isOperationalRequestStatus)(value);
 }
 async function appendTimeline(requestId, organizationId, event) {
     await db
@@ -209,7 +199,7 @@ async function updateOperationalRequestStatus(context, input) {
         throw new https_1.HttpsError('failed-precondition', 'Request has invalid status');
     }
     const next = input.status;
-    if (!ALLOWED_TRANSITIONS[current].includes(next)) {
+    if (!workOrderTransitions_1.ALLOWED_TRANSITIONS[current].includes(next)) {
         throw new https_1.HttpsError('failed-precondition', `Cannot transition from ${current} to ${next}`);
     }
     if (next === 'resolved' || next === 'closed') {
@@ -568,7 +558,7 @@ async function updateWorkOrderStatus(context, input) {
         throw new https_1.HttpsError('failed-precondition', 'Work order has invalid status');
     }
     const next = input.status;
-    if (!ALLOWED_TRANSITIONS[current].includes(next)) {
+    if (!workOrderTransitions_1.ALLOWED_TRANSITIONS[current].includes(next)) {
         throw new https_1.HttpsError('failed-precondition', `Cannot transition work order from ${current} to ${next}`);
     }
     const now = Date.now();
@@ -600,7 +590,7 @@ async function updateWorkOrderStatus(context, input) {
             const reqData = reqSnap.data();
             (0, requestContext_1.requireTenantMatch)(context, reqData.organizationId);
             const reqCurrent = String(reqData.status || '');
-            if (isStatus(reqCurrent) && ALLOWED_TRANSITIONS[reqCurrent].includes(next)) {
+            if (isStatus(reqCurrent) && workOrderTransitions_1.ALLOWED_TRANSITIONS[reqCurrent].includes(next)) {
                 const reqPatch = { status: next, updatedAt: now };
                 if (next === 'acknowledged')
                     reqPatch.acknowledgedAt = now;

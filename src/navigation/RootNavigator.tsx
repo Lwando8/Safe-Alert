@@ -21,6 +21,11 @@ import CitizenNavigator from './CitizenNavigator';
 import ResponderNavigator from './ResponderNavigator';
 import AdminNavigator from './AdminNavigator';
 import PlatformAccessScreen from '../screens/PlatformAccessScreen';
+import {
+  flushPendingPushDeepLink,
+  navigationRef,
+  queueOrNavigatePushDeepLink,
+} from './navigationRef';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -105,23 +110,53 @@ function AuthenticatedShell({
       if (next === 'user' || next === 'responder') {
         await setPersistedLastExperience(next);
         const email = await AsyncStorage.getItem('clerkSessionEmail');
-        await establishExpressSosCompat({
+        const compat = await establishExpressSosCompat({
           personId: session.personId || 'unknown',
           email,
           experience: next,
           unitCode: session.unitId,
           organizationId: session.orgId,
+          canUseResponderExperience: Boolean(session.canUseResponderExperience),
         });
+
+        // Responder shell requires persisted legacy ResponderProfile (unit-backed).
+        // Fail closed to access screen — do not invent synthetic units.
+        if (next === 'responder' && (!compat.ok || !compat.profilePersisted)) {
+          console.warn(
+            '[AuthenticatedShell] responder profile bridge failed',
+            !compat.ok ? compat.reason : 'profile_not_persisted'
+          );
+          if (!cancelled) {
+            setExperience('none');
+            setRouting(false);
+          }
+          return;
+        }
       }
 
-      setExperience(next);
-      setRouting(false);
+      if (!cancelled) {
+        setExperience(next);
+        setRouting(false);
+      }
     }
     void route();
     return () => {
       cancelled = true;
     };
-  }, [session, legacyRole]);
+  }, [
+    session.status,
+    session.personId,
+    session.orgId,
+    session.unitId,
+    session.membershipStatus,
+    session.role,
+    session.canUseUserExperience,
+    session.canUseResponderExperience,
+    // permissions/capabilities identity: join for stable dep
+    Array.isArray(session.permissions) ? session.permissions.join('|') : '',
+    Array.isArray(session.capabilities) ? session.capabilities.join('|') : '',
+    legacyRole,
+  ]);
 
   if (routing || session.status === 'pending' || session.status === 'idle') {
     return (
@@ -236,7 +271,10 @@ function ClerkAuthGate({
   return (
     <PlatformSessionProvider isAuthenticated>
       <AuthProvider userRole={legacyRole} signIn={onLegacyRole} signOut={handleSignOut}>
-        <NavigationContainer>
+        <NavigationContainer
+          ref={navigationRef}
+          onReady={() => flushPendingPushDeepLink()}
+        >
           <AuthenticatedShell legacyRole={legacyRole} onSignOut={handleSignOut} />
         </NavigationContainer>
       </AuthProvider>
@@ -296,7 +334,10 @@ function LegacyAuthGate() {
   return (
     <AuthProvider userRole={userRole} signIn={handleAuthenticate} signOut={handleSignOut}>
       <PlatformSessionProvider isAuthenticated>
-        <NavigationContainer>
+        <NavigationContainer
+          ref={navigationRef}
+          onReady={() => flushPendingPushDeepLink()}
+        >
           {userRole === 'admin' ? (
             <Stack.Navigator screenOptions={{ headerShown: false }}>
               <Stack.Screen name="Admin" component={AdminNavigator} />
@@ -321,7 +362,7 @@ export default function RootNavigator() {
         return getPersistedActiveOrgId();
       },
       onNavigate: payload => {
-        console.log('Push deep link (validated)', payload);
+        queueOrNavigatePushDeepLink(payload);
       },
     });
     return cleanup;
