@@ -107,7 +107,7 @@ cd firebase/functions && npm run seed:phase2b && npm run probe:golden-path
 **Android device:** Xiaomi `2406APNFAG` (`degas`) via USB `adb` + `adb reverse` (ports 4000/5001/8080/8081/9099).  
 **iOS (this pass):** iPhone 16 Simulator (iOS 18.5, UDID `064004AC-2CF8-4E84-BCC9-FDD193839459`) via Expo Go → `exp://127.0.0.1:8081`.  
 **Physical iPhone:** NOT TESTED (none connected).  
-**Clerk user:** `user_3HbVtKcH57Flyw0ObCsbyhKqWkW` (seeded `university-a` student membership).  
+**Clerk users:** student `user_3HbVtKcH57Flyw0ObCsbyhKqWkW`; responder `user_3HdOoempZCvqyQuYIksn2PKkbia` (`lwando@urbanlife.org.za`, seed track `hybrid` / `ALPHA-12`).  
 **Date:** 2026-08-08.
 
 | Client | Auth+bridge | orgDevices | Push F/B/cold | Report→WO | Express SOS |
@@ -115,8 +115,20 @@ cd firebase/functions && npm run seed:phase2b && npm run probe:golden-path
 | iOS user (Simulator) | **PASS** | **PASS** (register + revoke + re-register) | PARTIAL (Expo Go; no APNs) | **PASS** report create (WO assign not re-run) | **PASS** |
 | iOS user (physical) | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN |
 | Android user | **PASS** | **PASS** (register + revoke on logout) | PARTIAL (Expo Go; no native push) | **PASS** report create (WO assign not re-run on device) | **PASS** |
-| iOS responder | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN |
-| Android responder | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN |
+| iOS responder (Simulator) | **PASS** | PARTIAL (Expo Go) | PARTIAL | **PASS** Accept→Start→Resolve→Close (lab WO; transitions aligned) | **PASS** (clerk-compat + unit `ALPHA-12`) |
+| Android responder | **PASS** | PARTIAL (Expo Go) | PARTIAL | **PASS** full WO lifecycle same `workOrderId` | **PASS** (clerk-compat + unit `ALPHA-12`) |
+
+### Responder WO / capability evidence (2026-08-08)
+
+| Check | Result |
+|-------|--------|
+| Transitions | `assigned → acknowledged → in_progress → resolved → closed` shared table; Ops mirrors |
+| Android physical WO | PASS — lab WO closed with linked request; 5× `updateWorkOrderStatusCallable` |
+| iOS Simulator responder shell | PASS — `unitId: ALPHA-12`, profile bridge; race fix for “session could not be loaded” |
+| Capability separation probe | PASS — security denied plumbing assign; facilities assigned same request → WO |
+| Seed tracks | `SEED_RESPONDER_TRACK=security\|facilities\|hybrid` (hybrid = lab dual-cap only) |
+| UI branch gates | Map/Jobs show WOs only when facilities caps present; Jobs when incident caps |
+| Express SOS cutover | **NO** |
 
 ### iOS Simulator user evidence (2026-08-08)
 
