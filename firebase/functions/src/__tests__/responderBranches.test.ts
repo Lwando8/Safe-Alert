@@ -3,7 +3,7 @@ import {
   canAccessFacilitiesWorkOrders,
   canAccessIncidentJobs,
   resolveResponderBranchVisibility,
-} from '../../../../src/auth/responderBranches';
+} from '../services/responderBranches';
 
 describe('responderBranches — security vs facilities UI gates', () => {
   it('security-only sees incident jobs, not work orders', () => {

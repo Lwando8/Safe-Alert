@@ -3,7 +3,7 @@ import {
   buildClerkCompatResponderProfile,
   resolveAuthoritativeUnitCode,
   shouldPersistClerkResponderProfile,
-} from '../../../../src/services/responderProfileBridge';
+} from '../services/responderProfileBridge';
 
 describe('responderProfileBridge — Clerk → ResponderProfile', () => {
   it('persists only for authoritative responder + unit', () => {

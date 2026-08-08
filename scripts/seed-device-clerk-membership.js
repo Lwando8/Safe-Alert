@@ -7,14 +7,14 @@
  *     CLERK_USER_ID=user_xxx \
  *     CLERK_USER_EMAIL=user@example.com \
  *     SEED_ROLE=student|responder \
- *     SEED_RESPONDER_TRACK=security|facilities|hybrid \
+ *     SEED_RESPONDER_TRACK=security|facilities|hybrid \   # default: security
  *     EXPRESS_UNIT_CODE=ALPHA-12 \
  *     node scripts/seed-device-clerk-membership.js
  *
  * Responder tracks (eventual product branches):
- *   security   — police/security only (INCIDENT_RESPONSE|PATROL); no facilities WO seed
+ *   security   — police/security only (INCIDENT_RESPONSE|PATROL); no facilities WO seed (lab default)
  *   facilities — maintenance/WO only (GENERAL_MAINTENANCE|PLUMBING|…); lab WO seeded
- *   hybrid     — lab dual-cap for SOS+WO smoke on one account (not production intent)
+ *   hybrid     — lab dual-cap for SOS+WO smoke on one account (not day-to-day default)
  *
  * Responder mode aligns PlatformSession.unitId with an existing Express lab unit
  * (default ALPHA-12) for security/hybrid so clerk-compat can resolve a real unit —
@@ -36,7 +36,7 @@ const admin = require(path.join(
 const clerkUserId = String(process.env.CLERK_USER_ID || '').trim();
 const clerkEmail = String(process.env.CLERK_USER_EMAIL || '').trim() || null;
 const seedRole = String(process.env.SEED_ROLE || 'student').trim().toLowerCase();
-const responderTrack = String(process.env.SEED_RESPONDER_TRACK || 'hybrid')
+const responderTrack = String(process.env.SEED_RESPONDER_TRACK || 'security')
   .trim()
   .toLowerCase();
 const expressUnitCode = String(process.env.EXPRESS_UNIT_CODE || 'ALPHA-12')

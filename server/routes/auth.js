@@ -199,14 +199,22 @@ router.post('/clerk-compat', (req, res) => {
     if (!unit && unitCode) {
       unit = store.getResponderUnitById(unitCode);
     }
-    // Synthetic ephemeral unit session when no Express unit mapping exists
+    // Fail closed: never invent CLERK-* / clerk_${personId} units.
+    // Mobile persists PlatformSession unit when Express mapping is absent (WO-only tracks).
+    if (!unit) {
+      return res.status(404).json({
+        error: 'No Express responder unit for unitCode',
+        code: 'NO_EXPRESS_UNIT',
+        unitCode: unitCode || null,
+      });
+    }
     const token = createSession(ROLES.RESPONDER_UNIT, {
       email: normalizedEmail,
       userId: String(personId),
-      responderUnitId: unit ? unit.id : `clerk_${personId}`,
-      organizationId: organizationId || (unit && unit.organizationId) || null,
+      responderUnitId: unit.id,
+      organizationId: organizationId || unit.organizationId || null,
       clerkCompat: true,
-      unitCode: unit ? unit.unitCode : unitCode || `CLERK-${String(personId).slice(0, 8)}`,
+      unitCode: unit.unitCode,
     });
     return res.json({
       token,
@@ -214,11 +222,11 @@ router.post('/clerk-compat', (req, res) => {
         id: String(personId),
         email: normalizedEmail,
         role: 'responder',
-        name: unit ? unit.unitCode : 'Clerk Responder',
-        responderUnitId: unit ? unit.unitCode : unitCode || null,
-        organizationId: organizationId || null,
+        name: unit.unitCode,
+        responderUnitId: unit.unitCode,
+        organizationId: organizationId || unit.organizationId || null,
       },
-      unit: unit ? sanitizeUnit(unit) : null,
+      unit: sanitizeUnit(unit),
     });
   }
 

@@ -105,9 +105,9 @@ cd firebase/functions && npm run seed:phase2b && npm run probe:golden-path
 ## Physical-device matrix
 
 **Android device:** Xiaomi `2406APNFAG` (`degas`) via USB `adb` + `adb reverse` (ports 4000/5001/8080/8081/9099).  
-**iOS (this pass):** iPhone 16 Simulator (iOS 18.5, UDID `064004AC-2CF8-4E84-BCC9-FDD193839459`) via Expo Go → `exp://127.0.0.1:8081`.  
-**Physical iPhone:** NOT TESTED (none connected).  
-**Clerk users:** student `user_3HbVtKcH57Flyw0ObCsbyhKqWkW`; responder `user_3HdOoempZCvqyQuYIksn2PKkbia` (`lwando@urbanlife.org.za`, seed track `hybrid` / `ALPHA-12`).  
+**iOS Simulator:** iPhone 16 Simulator (iOS 18.5) via Expo Go → `exp://127.0.0.1:8081`.  
+**Physical iPhone:** **PASS** (2026-08-08) — Expo Go LAN QR `exp://192.168.0.90:8081`; Clerk responder golden path green (see table).  
+**Clerk users:** student `user_3HbVtKcH57Flyw0ObCsbyhKqWkW`; responder `user_3HdOoempZCvqyQuYIksn2PKkbia` (`lwando@urbanlife.org.za`; lab default track now `security` / `ALPHA-12`; hybrid only when explicitly seeded).  
 **Date:** 2026-08-08.
 
 | Client | Auth+bridge | orgDevices | Push F/B/cold | Report→WO | Express SOS |
@@ -116,7 +116,31 @@ cd firebase/functions && npm run seed:phase2b && npm run probe:golden-path
 | iOS user (physical) | NOT RUN | NOT RUN | NOT RUN | NOT RUN | NOT RUN |
 | Android user | **PASS** | **PASS** (register + revoke on logout) | PARTIAL (Expo Go; no native push) | **PASS** report create (WO assign not re-run on device) | **PASS** |
 | iOS responder (Simulator) | **PASS** | PARTIAL (Expo Go) | PARTIAL | **PASS** Accept→Start→Resolve→Close (lab WO; transitions aligned) | **PASS** (clerk-compat + unit `ALPHA-12`) |
+| iOS responder (physical) | **PASS** | PARTIAL (Expo Go) | PARTIAL — Expo Go by design | **PASS** (shell + WO surfaces as seeded) | **PASS** (clerk-compat + unit) |
 | Android responder | **PASS** | PARTIAL (Expo Go) | PARTIAL | **PASS** full WO lifecycle same `workOrderId` | **PASS** (clerk-compat + unit `ALPHA-12`) |
+
+### Physical iPhone responder gate (2026-08-08)
+
+Operator confirmation: physical device responder path **PASS**.
+
+| Check | Result |
+|-------|--------|
+| Clerk login | PASS |
+| PlatformSession ready | PASS |
+| Experience = responder | PASS |
+| Real unitId | PASS |
+| Clerk compat | PASS |
+| ResponderProfile | PASS |
+| Navigator | PASS |
+| Shift | PASS |
+| Map | PASS |
+| Assignments | PASS |
+| Work Orders | PASS |
+| Express SOS smoke | PASS |
+| Logout | PASS |
+| Kill/reopen | PASS |
+
+**Gate:** Physical iPhone responder foundation is green. Remote push / cold-start deep link remain blocked on Expo Go (dev client required).
 
 ### Responder WO / capability evidence (2026-08-08)
 
@@ -125,8 +149,9 @@ cd firebase/functions && npm run seed:phase2b && npm run probe:golden-path
 | Transitions | `assigned → acknowledged → in_progress → resolved → closed` shared table; Ops mirrors |
 | Android physical WO | PASS — lab WO closed with linked request; 5× `updateWorkOrderStatusCallable` |
 | iOS Simulator responder shell | PASS — `unitId: ALPHA-12`, profile bridge; race fix for “session could not be loaded” |
+| Physical iPhone responder shell | PASS — LAN Metro + Clerk responder golden path |
 | Capability separation probe | PASS — security denied plumbing assign; facilities assigned same request → WO |
-| Seed tracks | `SEED_RESPONDER_TRACK=security\|facilities\|hybrid` (hybrid = lab dual-cap only) |
+| Seed tracks | default `SEED_RESPONDER_TRACK=security`; `facilities` / `hybrid` still supported |
 | UI branch gates | Map/Jobs show WOs only when facilities caps present; Jobs when incident caps |
 | Express SOS cutover | **NO** |
 

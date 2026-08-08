@@ -89,7 +89,10 @@ After every emulator restart, data is wiped — always re-run `seed:phase2b` and
 ### Expo / native strategy
 
 - **CNG / prebuild:** Android tree is not checked in; EAS/prebuild generates native projects.
-- iOS `SafeAlert.entitlements` may be empty in repo until push capability is injected by EAS/`expo prebuild` with `expo-notifications` plugin (`mode: production` in `app.json`).
+- **Dev client:** `eas.json` profile `development` (`developmentClient: true`, internal distribution). App scheme `safealert`. Plugin `expo-dev-client` + `expo-notifications` (`mode: production`).
+- Expo project ID: `f9205a74-28bb-4abb-b289-13699fe0b32d` (`@lwandonova/safety-alert-app`).
+- iOS `SafeAlert.entitlements` may be empty in repo until push capability is injected by EAS/`expo prebuild` with `expo-notifications` plugin.
+- **Expo Go push = PARTIAL by design** — remote APNs/FCM + cold-start deep link require the development client.
 - Do not invent a checked-in `android/` solely for audit completeness.
 
 ---

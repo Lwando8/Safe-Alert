@@ -125,12 +125,12 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren \
   npm --prefix firebase/functions run seed:phase2b
 
 if [[ -n "$SEED_CLERK_USER" ]]; then
-  echo "Seeding device membership for $SEED_CLERK_USER (SEED_ROLE=${SEED_ROLE:-student}, SEED_RESPONDER_TRACK=${SEED_RESPONDER_TRACK:-hybrid})..."
+  echo "Seeding device membership for $SEED_CLERK_USER (SEED_ROLE=${SEED_ROLE:-student}, SEED_RESPONDER_TRACK=${SEED_RESPONDER_TRACK:-security})..."
   FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren \
     CLERK_USER_ID="$SEED_CLERK_USER" \
     CLERK_USER_EMAIL="${CLERK_USER_EMAIL:-}" \
     SEED_ROLE="${SEED_ROLE:-student}" \
-    SEED_RESPONDER_TRACK="${SEED_RESPONDER_TRACK:-hybrid}" \
+    SEED_RESPONDER_TRACK="${SEED_RESPONDER_TRACK:-security}" \
     EXPRESS_UNIT_CODE="${EXPRESS_UNIT_CODE:-ALPHA-12}" \
     node scripts/seed-device-clerk-membership.js
 fi
