@@ -76,8 +76,8 @@ function slaBadgeVariant(
 
 const NEXT_STATUS: Record<string, string[]> = {
   submitted: ['acknowledged', 'assigned'],
-  acknowledged: ['assigned', 'on_hold'],
-  assigned: ['in_progress', 'on_hold'],
+  acknowledged: ['in_progress', 'assigned', 'on_hold'],
+  assigned: ['acknowledged', 'in_progress', 'on_hold'],
   in_progress: ['resolved', 'on_hold'],
   on_hold: ['in_progress', 'assigned'],
   resolved: ['closed'],
@@ -160,7 +160,10 @@ export function RequestsClient({ initial, clerkEnabled }: Props) {
 
   useEffect(() => {
     if (!clerkEnabled) return;
-    void refresh();
+    const timer = window.setTimeout(() => {
+      void refresh();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [clerkEnabled, refresh, tenantEpoch]);
 
   async function mutate(body: Record<string, unknown>) {

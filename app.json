@@ -2,6 +2,7 @@
   "expo": {
     "name": "Safe Alert",
     "slug": "safety-alert-app",
+    "scheme": "safealert",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -62,6 +63,7 @@
       }
     },
     "plugins": [
+      "expo-dev-client",
       [
         "expo-location",
         {
@@ -84,7 +86,9 @@
         }
       ],
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      "expo-secure-store",
+      "@clerk/expo"
     ],
     "notification": {
       "icon": "./assets/icon.png",

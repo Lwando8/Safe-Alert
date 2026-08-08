@@ -1,12 +1,14 @@
 /**
- * Mobile Clerk cutover prep (Phase G) — code only.
+ * Mobile Clerk authentication mode.
  *
- * Default: Firebase / legacy API auth remains active.
- * Do NOT set EXPO_PUBLIC_ENABLE_CLERK_MOBILE=true in production until the
- * physical-device removal gate passes (see docs/PHASE2G-MOBILE-CLERK-PREP.md).
+ * When EXPO_PUBLIC_ENABLE_CLERK_MOBILE=true and a real publishable key is set,
+ * Clerk is the primary mobile identity provider (unified login).
+ *
+ * Legacy Express role-selector login remains available only when Clerk is off,
+ * or when EXPO_PUBLIC_ALLOW_LEGACY_EXPRESS_LOGIN=true (escape hatch).
  */
 
-export type MobileAuthMode = 'legacy_api' | 'clerk_prep' | 'clerk';
+export type MobileAuthMode = 'legacy_api' | 'clerk';
 
 export function getMobileClerkPublishableKey(): string {
   return (
@@ -16,7 +18,7 @@ export function getMobileClerkPublishableKey(): string {
   );
 }
 
-export function isMobileClerkPrepEnabled(): boolean {
+export function isMobileClerkEnabled(): boolean {
   const flag = String(process.env.EXPO_PUBLIC_ENABLE_CLERK_MOBILE || '')
     .trim()
     .toLowerCase();
@@ -25,12 +27,20 @@ export function isMobileClerkPrepEnabled(): boolean {
   return pk.startsWith('pk_') && !pk.includes('your_key');
 }
 
-/**
- * Auth mode for mobile. Clerk is never forced on while prep flag is off.
- * Server-side ALLOW_FIREBASE_AUTH_FALLBACK remains independent and must stay
- * enabled until the device gate completes.
- */
+/** @deprecated Use isMobileClerkEnabled — kept for existing call sites. */
+export function isMobileClerkPrepEnabled(): boolean {
+  return isMobileClerkEnabled();
+}
+
+export function isLegacyExpressLoginAllowed(): boolean {
+  if (!isMobileClerkEnabled()) return true;
+  const flag = String(process.env.EXPO_PUBLIC_ALLOW_LEGACY_EXPRESS_LOGIN || '')
+    .trim()
+    .toLowerCase();
+  return flag === '1' || flag === 'true' || flag === 'yes';
+}
+
 export function resolveMobileAuthMode(): MobileAuthMode {
-  if (!isMobileClerkPrepEnabled()) return 'legacy_api';
-  return 'clerk_prep';
+  if (isMobileClerkEnabled()) return 'clerk';
+  return 'legacy_api';
 }

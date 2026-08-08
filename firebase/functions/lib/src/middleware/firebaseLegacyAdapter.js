@@ -11,14 +11,15 @@ const membershipLoader_1 = require("./membershipLoader");
  * Claims may hint organizationId / unitId but are NEVER sole authority for
  * membership status or permissions.
  */
-async function resolveFromFirebaseLegacy(auth) {
+async function resolveFromFirebaseLegacy(auth, options) {
     const link = await IdentityLinkService_1.IdentityLinkService.resolveByFirebaseUid(auth.uid);
     const claimOrg = typeof auth.token.organizationId === 'string' && auth.token.organizationId
         ? String(auth.token.organizationId)
         : undefined;
+    const organizationIdHint = options?.organizationIdHint || claimOrg;
     const membership = await (0, membershipLoader_1.loadActiveMembershipForUser)({
         userId: link.userId,
-        organizationIdHint: claimOrg,
+        organizationIdHint,
     });
     // Platform operators must authenticate via Clerk — never elevate from Firebase claims alone.
     const isPlatformOperator = false;

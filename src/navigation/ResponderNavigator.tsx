@@ -7,6 +7,8 @@ import ResponderAlertDetailScreen from '../screens/responder/ResponderAlertDetai
 import ResponderAssignmentsScreen from '../screens/responder/ResponderAssignmentsScreen';
 import ResponderMapScreen from '../screens/responder/ResponderMapScreen';
 import ResponderShiftStartScreen from '../screens/responder/ResponderShiftStartScreen';
+import ResponderWorkOrdersScreen from '../screens/responder/ResponderWorkOrdersScreen';
+import ResponderWorkOrderDetailScreen from '../screens/responder/ResponderWorkOrderDetailScreen';
 import { ResponderStackParamList } from '../types';
 import { ShiftSession } from '../types/auth';
 import { ResponderProfile } from '../types/dispatch';
@@ -52,6 +54,23 @@ export default function ResponderNavigator() {
         <Text style={{ color: '#e2e8f0', fontSize: 16, textAlign: 'center', marginBottom: 16 }}>
           Responder session could not be loaded. Sign in again.
         </Text>
+        <TouchableOpacity
+          onPress={() => {
+            setLoading(true);
+            void refresh();
+          }}
+          style={{
+            backgroundColor: '#1e293b',
+            paddingHorizontal: 20,
+            paddingVertical: 12,
+            borderRadius: 10,
+            marginBottom: 12,
+            borderWidth: 1,
+            borderColor: '#334155',
+          }}
+        >
+          <Text style={{ color: '#93c5fd', fontWeight: '700' }}>Retry</Text>
+        </TouchableOpacity>
         <TouchableOpacity
           onPress={() => signOut()}
           style={{
@@ -107,6 +126,16 @@ export default function ResponderNavigator() {
               />
             )}
           </Stack.Screen>
+          <Stack.Screen
+            name="ResponderWorkOrders"
+            component={ResponderWorkOrdersScreen}
+            options={{ title: 'Work orders' }}
+          />
+          <Stack.Screen
+            name="ResponderWorkOrderDetail"
+            component={ResponderWorkOrderDetailScreen}
+            options={{ title: 'Work order' }}
+          />
           <Stack.Screen name="ResponderAlertDetail" options={{ title: 'Active trip' }}>
             {props => <ResponderAlertDetailScreen {...props} profile={profile} />}
           </Stack.Screen>

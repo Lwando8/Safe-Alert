@@ -174,6 +174,96 @@ router.post('/admin/login', (req, res) => {
   });
 });
 
+/**
+ * Clerk → Express SOS compatibility session.
+ * Secret-gated. Does not implement Person/membership/capabilities.
+ * Creates a temporary Express JWT so DispatchApi Bearer auth works after Clerk login.
+ */
+router.post('/clerk-compat', (req, res) => {
+  const expected =
+    process.env.EXPRESS_CLERK_COMPAT_SECRET || process.env.MOBILE_BRIDGE_MINT_SECRET || '';
+  const { compatSecret, personId, email, experience, unitCode, organizationId } = req.body || {};
+  if (!expected || !compatSecret || compatSecret !== expected) {
+    return res.status(401).json({ error: 'Unauthorized', code: 'COMPAT_SECRET' });
+  }
+  if (!personId) {
+    return res.status(400).json({ error: 'personId required' });
+  }
+
+  const normalizedEmail = String(email || `${personId}@clerk.local`)
+    .trim()
+    .toLowerCase();
+
+  if (experience === 'responder') {
+    let unit = unitCode ? store.getResponderUnitByLoginId(unitCode) : null;
+    if (!unit && unitCode) {
+      unit = store.getResponderUnitById(unitCode);
+    }
+    // Fail closed: never invent CLERK-* / clerk_${personId} units.
+    // Mobile persists PlatformSession unit when Express mapping is absent (WO-only tracks).
+    if (!unit) {
+      return res.status(404).json({
+        error: 'No Express responder unit for unitCode',
+        code: 'NO_EXPRESS_UNIT',
+        unitCode: unitCode || null,
+      });
+    }
+    const token = createSession(ROLES.RESPONDER_UNIT, {
+      email: normalizedEmail,
+      userId: String(personId),
+      responderUnitId: unit.id,
+      organizationId: organizationId || unit.organizationId || null,
+      clerkCompat: true,
+      unitCode: unit.unitCode,
+    });
+    return res.json({
+      token,
+      user: {
+        id: String(personId),
+        email: normalizedEmail,
+        role: 'responder',
+        name: unit.unitCode,
+        responderUnitId: unit.unitCode,
+        organizationId: organizationId || unit.organizationId || null,
+      },
+      unit: sanitizeUnit(unit),
+    });
+  }
+
+  // Ensure citizen record exists for SOS ownership (no password path)
+  let citizen = store.getCitizenByEmail(normalizedEmail);
+  if (!citizen) {
+    citizen = {
+      id: String(personId),
+      email: normalizedEmail,
+      passwordHash: hashPassword(`clerk-compat-${personId}-${Date.now()}`),
+      role: ROLES.CITIZEN,
+      name: normalizedEmail.split('@')[0] || 'Citizen',
+      phone: null,
+      createdAt: store.now(),
+      updatedAt: store.now(),
+      clerkCompat: true,
+    };
+    store.setCitizen(normalizedEmail, citizen);
+  }
+
+  const token = createSession(ROLES.CITIZEN, {
+    email: citizen.email,
+    userId: citizen.id,
+    clerkCompat: true,
+    organizationId: organizationId || null,
+  });
+  return res.json({
+    token,
+    user: {
+      id: citizen.id,
+      email: citizen.email,
+      role: 'client',
+      name: citizen.name,
+    },
+  });
+});
+
 router.get('/me', requireAuth, (req, res) => {
   const { role, email, userId, responderUnitId } = req.auth;
   if (role === ROLES.CITIZEN) {

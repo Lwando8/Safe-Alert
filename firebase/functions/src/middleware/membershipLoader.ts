@@ -43,6 +43,53 @@ function asMembershipRecord(id: string, raw: Record<string, unknown>): Membershi
 }
 
 /**
+ * Classify non-active membership access for explicit mobile session states.
+ */
+export async function classifyMembershipAccess(userId: string): Promise<{
+  state: 'no_membership' | 'pending_access' | 'revoked';
+  membershipId?: string;
+  organizationId?: string;
+  status?: string;
+}> {
+  const snap = await db
+    .collection('memberships')
+    .where('userId', '==', userId)
+    .limit(25)
+    .get();
+
+  if (snap.empty) {
+    return { state: 'no_membership' };
+  }
+
+  const rows = snap.docs.map(doc => ({
+    id: doc.id,
+    data: asMembershipRecord(doc.id, doc.data() as Record<string, unknown>),
+  }));
+
+  const pending = rows.find(r => r.data.status === 'invited' || r.data.status === 'pending');
+  if (pending) {
+    return {
+      state: 'pending_access',
+      membershipId: pending.id,
+      organizationId: pending.data.organizationId,
+      status: pending.data.status,
+    };
+  }
+
+  const revoked = rows.find(r => r.data.status === 'revoked' || r.data.status === 'suspended');
+  if (revoked) {
+    return {
+      state: 'revoked',
+      membershipId: revoked.id,
+      organizationId: revoked.data.organizationId,
+      status: revoked.data.status,
+    };
+  }
+
+  return { state: 'no_membership' };
+}
+
+/**
  * Load exactly one active membership for a user.
  * organizationIdHint (e.g. Firebase claim) may narrow candidates but cannot
  * invent an org or override a non-matching membership set.

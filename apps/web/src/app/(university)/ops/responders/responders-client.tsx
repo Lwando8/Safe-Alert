@@ -141,7 +141,10 @@ function RespondersClientInner({
 
   useEffect(() => {
     if (tenantEpoch > 0) {
-      void refresh();
+      const timer = window.setTimeout(() => {
+        void refresh();
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
   }, [tenantEpoch, refresh]);
 

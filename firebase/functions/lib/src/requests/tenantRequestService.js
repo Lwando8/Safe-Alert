@@ -38,6 +38,9 @@ exports.createOperationalRequest = createOperationalRequest;
 exports.listOperationalRequests = listOperationalRequests;
 exports.updateOperationalRequestStatus = updateOperationalRequestStatus;
 exports.assignOperationalRequest = assignOperationalRequest;
+exports.listMyWorkOrders = listMyWorkOrders;
+exports.getWorkOrder = getWorkOrder;
+exports.updateWorkOrderStatus = updateWorkOrderStatus;
 const https_1 = require("firebase-functions/v2/https");
 const requestContext_1 = require("../middleware/requestContext");
 const moduleGate_1 = require("../services/moduleGate");
@@ -49,19 +52,10 @@ const orgNotifications_1 = require("../notifications/orgNotifications");
 const authorizeAction_1 = require("../policy/authorizeAction");
 const universityEntitlements_1 = require("../services/universityEntitlements");
 const personService_1 = require("../services/personService");
+const workOrderTransitions_1 = require("./workOrderTransitions");
 const db = (0, firebaseApps_1.getDb)();
-const ALLOWED_TRANSITIONS = {
-    submitted: ['acknowledged', 'assigned', 'closed'],
-    acknowledged: ['assigned', 'awaiting_information', 'on_hold', 'closed'],
-    assigned: ['in_progress', 'awaiting_information', 'on_hold', 'closed'],
-    in_progress: ['awaiting_information', 'on_hold', 'resolved', 'closed'],
-    awaiting_information: ['in_progress', 'on_hold', 'assigned', 'closed'],
-    on_hold: ['in_progress', 'assigned', 'awaiting_information', 'closed'],
-    resolved: ['closed'],
-    closed: [],
-};
 function isStatus(value) {
-    return typeof value === 'string' && value in ALLOWED_TRANSITIONS;
+    return (0, workOrderTransitions_1.isOperationalRequestStatus)(value);
 }
 async function appendTimeline(requestId, organizationId, event) {
     await db
@@ -205,7 +199,7 @@ async function updateOperationalRequestStatus(context, input) {
         throw new https_1.HttpsError('failed-precondition', 'Request has invalid status');
     }
     const next = input.status;
-    if (!ALLOWED_TRANSITIONS[current].includes(next)) {
+    if (!workOrderTransitions_1.ALLOWED_TRANSITIONS[current].includes(next)) {
         throw new https_1.HttpsError('failed-precondition', `Cannot transition from ${current} to ${next}`);
     }
     if (next === 'resolved' || next === 'closed') {
@@ -430,12 +424,236 @@ async function assignOperationalRequest(context, input) {
         kind: 'ops_request_assigned',
         title: 'Request assigned',
         body: String(data.title || ref.id),
-        data: { requestId: ref.id, workOrderId: workRef.id },
+        data: {
+            requestId: ref.id,
+            workOrderId: workRef.id,
+            organizationId: context.organizationId,
+        },
         targetUserId: workOrder.assignedUserId || undefined,
     });
     return {
         requestId: ref.id,
         workOrder,
         organizationId: context.organizationId,
+    };
+}
+function canResponderAccessWorkOrder(context, data) {
+    if (context.permissions.includes('requests:read-all'))
+        return true;
+    if (data.assignedUserId && data.assignedUserId === context.userId)
+        return true;
+    // Team visibility is handled at list time; detail requires assignment or read-all
+    return false;
+}
+/**
+ * List work orders visible to the caller (assigned to me / team / available).
+ */
+async function listMyWorkOrders(context, options) {
+    await (0, moduleGate_1.assertModuleEnabled)(context.organizationId, 'OPERATIONS');
+    (0, requestContext_1.authorizeAnyPermission)(context, [
+        'requests:read-all',
+        'requests:read-own',
+        'requests:update',
+        'requests:assign',
+    ]);
+    const scope = options?.scope || 'all_visible';
+    const limit = Math.min(Math.max(Number(options?.limit) || 100, 1), 200);
+    let query = db
+        .collection(collections_1.COLLECTIONS.workOrders)
+        .where('organizationId', '==', context.organizationId);
+    if (scope === 'assigned_to_me') {
+        query = query.where('assignedUserId', '==', context.userId);
+    }
+    else if (scope === 'available') {
+        query = query.where('assignedUserId', '==', null);
+    }
+    if (options?.status) {
+        query = query.where('status', '==', options.status);
+    }
+    const list = await query.orderBy('createdAt', 'desc').limit(limit).get();
+    let workOrders = list.docs.map(d => d.data());
+    if (scope === 'all_visible' && !context.permissions.includes('requests:read-all')) {
+        workOrders = workOrders.filter(wo => {
+            const row = wo;
+            return !row.assignedUserId || row.assignedUserId === context.userId;
+        });
+    }
+    if (scope === 'my_team') {
+        // Without a dedicated team membership index, return team-assigned rows the caller can see
+        workOrders = workOrders.filter(wo => {
+            const row = wo;
+            return !!row.assignedTeamId && (!row.assignedUserId || row.assignedUserId === context.userId);
+        });
+    }
+    return {
+        organizationId: context.organizationId,
+        personId: context.userId,
+        workOrders,
+    };
+}
+async function getWorkOrder(context, workOrderId) {
+    await (0, moduleGate_1.assertModuleEnabled)(context.organizationId, 'OPERATIONS');
+    const ref = db.doc(`${collections_1.COLLECTIONS.workOrders}/${String(workOrderId)}`);
+    const snap = await ref.get();
+    if (!snap.exists)
+        throw new https_1.HttpsError('not-found', 'Work order not found');
+    const data = snap.data();
+    (0, requestContext_1.requireTenantMatch)(context, data.organizationId);
+    if (!canResponderAccessWorkOrder(context, data) && data.assignedUserId !== context.userId) {
+        if (!context.permissions.includes('requests:read-all')) {
+            throw new https_1.HttpsError('permission-denied', 'Work order not visible to this membership');
+        }
+    }
+    let request = null;
+    if (data.requestId) {
+        const reqSnap = await db.doc(`${collections_1.COLLECTIONS.operationalRequests}/${String(data.requestId)}`).get();
+        if (reqSnap.exists) {
+            const reqData = reqSnap.data();
+            (0, requestContext_1.requireTenantMatch)(context, reqData.organizationId);
+            // Reporter-safe subset for responders
+            request = {
+                id: reqData.id,
+                title: reqData.title,
+                description: reqData.description,
+                category: reqData.category,
+                priority: reqData.priority,
+                location: reqData.location,
+                locationLabel: reqData.locationLabel,
+                status: reqData.status,
+                createdAt: reqData.createdAt,
+                attachments: reqData.attachments || [],
+            };
+        }
+    }
+    return {
+        organizationId: context.organizationId,
+        workOrder: data,
+        request,
+    };
+}
+/**
+ * Responder progresses a work order using the shared OperationalRequestStatus machine.
+ * Syncs linked operational request + audit + notify.
+ */
+async function updateWorkOrderStatus(context, input) {
+    await (0, moduleGate_1.assertModuleEnabled)(context.organizationId, 'OPERATIONS');
+    if (!isStatus(input.status)) {
+        throw new https_1.HttpsError('invalid-argument', 'Invalid status');
+    }
+    const ref = db.doc(`${collections_1.COLLECTIONS.workOrders}/${String(input.workOrderId)}`);
+    const snap = await ref.get();
+    if (!snap.exists)
+        throw new https_1.HttpsError('not-found', 'Work order not found');
+    const data = snap.data();
+    (0, requestContext_1.requireTenantMatch)(context, data.organizationId);
+    const isAssignee = data.assignedUserId === context.userId;
+    const canUpdate = isAssignee ||
+        context.permissions.includes('requests:update') ||
+        context.permissions.includes('requests:assign');
+    if (!canUpdate) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized to update this work order');
+    }
+    const current = String(data.status || '');
+    if (!isStatus(current)) {
+        throw new https_1.HttpsError('failed-precondition', 'Work order has invalid status');
+    }
+    const next = input.status;
+    if (!workOrderTransitions_1.ALLOWED_TRANSITIONS[current].includes(next)) {
+        throw new https_1.HttpsError('failed-precondition', `Cannot transition work order from ${current} to ${next}`);
+    }
+    const now = Date.now();
+    const patch = {
+        status: next,
+        updatedAt: now,
+    };
+    if (next === 'assigned' || next === 'acknowledged') {
+        patch.acceptedAt = data.acceptedAt || now;
+    }
+    if (next === 'in_progress') {
+        patch.workStartedAt = data.workStartedAt || now;
+        patch.acceptedAt = data.acceptedAt || now;
+    }
+    if (next === 'resolved' || next === 'closed') {
+        patch.resolvedAt = now;
+        if (input.resolutionSummary)
+            patch.resolutionSummary = String(input.resolutionSummary);
+    }
+    if (input.note) {
+        patch.notes = [data.notes, input.note].filter(Boolean).join('\n');
+    }
+    await ref.set(patch, { merge: true });
+    // Sync linked operational request (tenant-safe; assignee path bypasses ops-only authorize)
+    if (data.requestId) {
+        const reqRef = db.doc(`${collections_1.COLLECTIONS.operationalRequests}/${String(data.requestId)}`);
+        const reqSnap = await reqRef.get();
+        if (reqSnap.exists) {
+            const reqData = reqSnap.data();
+            (0, requestContext_1.requireTenantMatch)(context, reqData.organizationId);
+            const reqCurrent = String(reqData.status || '');
+            if (isStatus(reqCurrent) && workOrderTransitions_1.ALLOWED_TRANSITIONS[reqCurrent].includes(next)) {
+                const reqPatch = { status: next, updatedAt: now };
+                if (next === 'acknowledged')
+                    reqPatch.acknowledgedAt = now;
+                if (next === 'in_progress')
+                    reqPatch.workStartedAt = now;
+                if (next === 'resolved') {
+                    reqPatch.resolvedAt = now;
+                    if (input.resolutionSummary) {
+                        reqPatch.resolutionSummary = String(input.resolutionSummary);
+                    }
+                }
+                if (next === 'closed')
+                    reqPatch.closedAt = now;
+                await reqRef.set(reqPatch, { merge: true });
+            }
+        }
+    }
+    await appendTimeline(String(data.requestId || ref.id), context.organizationId, {
+        eventType: 'work_order_status',
+        userId: context.userId,
+        authProvider: context.authProvider,
+        workOrderId: ref.id,
+        previousStatus: current,
+        status: next,
+        note: input.note || null,
+    });
+    await (0, recordAuditEvent_1.recordAuditEvent)({
+        organizationId: context.organizationId,
+        siteId: data.siteId || null,
+        actorUserId: context.userId,
+        actorPersonId: context.userId,
+        action: next === 'resolved' || next === 'closed' ? 'work_completed' : 'work_status_updated',
+        resourceType: 'workOrder',
+        resourceId: ref.id,
+        previousState: { status: current },
+        newState: { status: next },
+    });
+    // Notify reporter via request if present
+    if (data.requestId) {
+        const reqSnap = await db.doc(`${collections_1.COLLECTIONS.operationalRequests}/${String(data.requestId)}`).get();
+        const reporterUserId = reqSnap.exists
+            ? String(reqSnap.data().reporterUserId || '')
+            : '';
+        if (reporterUserId) {
+            await (0, orgNotifications_1.notifyOrgEvent)({
+                organizationId: context.organizationId,
+                kind: 'ops_request_status',
+                title: 'Your request was updated',
+                body: `Status: ${next}`,
+                data: {
+                    requestId: String(data.requestId),
+                    workOrderId: ref.id,
+                    status: next,
+                    organizationId: context.organizationId,
+                },
+                targetUserId: reporterUserId,
+            });
+        }
+    }
+    return {
+        id: ref.id,
+        status: next,
+        organizationId: context.organizationId,
+        requestId: data.requestId || null,
     };
 }

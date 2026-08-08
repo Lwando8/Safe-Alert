@@ -206,7 +206,10 @@ describe('push registration tenant scope', () => {
       .where('token', '!=', null)
       .limit(1000)
       .get();
-    return snap.docs.map(d => (d.data() as { token: string }).token);
+    return snap.docs
+      .map(d => d.data() as { token?: string; status?: string })
+      .filter(row => row.token && row.status !== 'revoked')
+      .map(row => String(row.token));
   }
 
   it('scopes device registrations by organization/user/installation/environment', async () => {

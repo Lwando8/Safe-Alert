@@ -29,7 +29,7 @@ export default function UnauthorizedPage() {
           Access Denied
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          You don't have permission to access this page.
+          You don&apos;t have permission to access this page.
         </p>
         
         <div className="mt-6 space-y-3">

@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
+import { usePlatformSession } from '../../context/PlatformSessionContext';
+import { resolveResponderBranchVisibility } from '../../auth/responderBranches';
 import { useResponderWebSocket } from '../../hooks/useResponderWebSocket';
 import { fetchAssignments, endShift } from '../../services/ResponderService';
 import { ResponderStackParamList } from '../../types';
@@ -55,6 +57,8 @@ function findMyAssignment(
 
 export default function ResponderAssignmentsScreen({ navigation, profile, onShiftEnded }: Props) {
   const { signOut } = useAuth();
+  const platform = usePlatformSession();
+  const branches = resolveResponderBranchVisibility(platform.capabilities);
   const [alerts, setAlerts] = useState<DispatchAlert[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -147,6 +151,11 @@ export default function ResponderAssignmentsScreen({ navigation, profile, onShif
           </Text>
         </View>
         <View style={styles.headerActions}>
+          {branches.showWorkOrders ? (
+            <TouchableOpacity onPress={() => navigation.navigate('ResponderWorkOrders')}>
+              <Text style={styles.link}>Work orders</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity onPress={() => navigation.navigate('ResponderMap')}>
             <Text style={styles.link}>Map</Text>
           </TouchableOpacity>

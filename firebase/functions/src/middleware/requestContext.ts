@@ -38,6 +38,11 @@ type AuthHeaderSource = {
   firebaseAuth?: { uid: string; token: Record<string, unknown> } | null;
   /** When true, Firebase fallback is refused even if globally enabled */
   disallowFirebaseFallback?: boolean;
+  /**
+   * Optional org selector among the caller's active memberships only.
+   * Never invents tenant access — loadActiveMembershipForUser fail-closes.
+   */
+  organizationIdHint?: string;
 };
 
 function extractBearer(authorizationHeader?: string): string | null {
@@ -47,7 +52,16 @@ function extractBearer(authorizationHeader?: string): string | null {
   return authorizationHeader.substring(7);
 }
 
-async function buildFromClerkToken(token: string): Promise<RequestContext> {
+/**
+ * Resolve Clerk JWT → RequestContext.
+ * Prefer Clerk session org when present; otherwise resolve membership from
+ * Firestore (platform-authoritative) so mobile sessions without an active
+ * Clerk Organization still work.
+ */
+async function buildFromClerkToken(
+  token: string,
+  organizationIdHint?: string
+): Promise<RequestContext> {
   let session: { sub: string; org_id?: string; org_role?: string };
   try {
     session = (await clerk.verifyToken(token, {
@@ -64,30 +78,29 @@ async function buildFromClerkToken(token: string): Promise<RequestContext> {
   const orgId = session.org_id;
   const orgRole = session.org_role;
 
-  if (!orgId || !orgRole) {
-    throw new HttpsError(
-      'failed-precondition',
-      'User must belong to an organization. Please select an organization.'
-    );
+  let organizationId: string | undefined;
+  let clerkOrganizationId = orgId || '';
+
+  if (orgId) {
+    try {
+      const organization = await clerk.organizations.getOrganization({
+        organizationId: orgId,
+      });
+      organizationId = String(organization.slug || organization.id);
+      if (!organizationId) {
+        throw new HttpsError('internal', 'Organization is missing slug/id');
+      }
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      console.error('Failed to fetch organization:', err);
+      throw new HttpsError('internal', 'Failed to fetch organization details');
+    }
   }
 
-  let organization;
-  try {
-    organization = await clerk.organizations.getOrganization({
-      organizationId: orgId,
-    });
-  } catch (err) {
-    console.error('Failed to fetch organization:', err);
-    throw new HttpsError('internal', 'Failed to fetch organization details');
-  }
-
-  const organizationId = String(organization.slug || organization.id);
-  if (!organizationId) {
-    throw new HttpsError('internal', 'Organization is missing slug/id');
-  }
   const membership = await loadActiveMembershipForUser({
     userId,
     organizationId,
+    organizationIdHint: organizationId ? undefined : organizationIdHint,
   });
 
   let isPlatformOperator = false;
@@ -107,13 +120,13 @@ async function buildFromClerkToken(token: string): Promise<RequestContext> {
   return {
     authUserId: userId,
     userId,
-    organizationId,
-    clerkOrganizationId: orgId,
+    organizationId: membership.data.organizationId,
+    clerkOrganizationId: membership.data.clerkOrganizationId || clerkOrganizationId,
     membershipId: membership.id,
     siteId: membership.data.siteId || '',
     zoneIds: membership.data.zoneIds,
     role: membership.data.kind,
-    clerkRole: orgRole,
+    clerkRole: orgRole || membership.data.clerkRole || '',
     permissions: membership.data.permissions || [],
     isPlatformOperator,
     authProvider: 'clerk',
@@ -132,7 +145,7 @@ export async function resolveRequestContext(
 
   if (clerkToken) {
     try {
-      return await buildFromClerkToken(clerkToken);
+      return await buildFromClerkToken(clerkToken, source.organizationIdHint);
     } catch (err) {
       // If token was explicitly a Clerk token from data, don't fall through on auth errors
       // that are membership/org failures — those should surface.
@@ -169,7 +182,9 @@ export async function resolveRequestContext(
     throw new HttpsError('unauthenticated', 'Authentication required');
   }
 
-  return resolveFromFirebaseLegacy(source.firebaseAuth);
+  return resolveFromFirebaseLegacy(source.firebaseAuth, {
+    organizationIdHint: source.organizationIdHint,
+  });
 }
 
 /**
@@ -177,7 +192,7 @@ export async function resolveRequestContext(
  */
 export async function resolveRequestContextFromCallable(
   req: CallableRequest,
-  options?: { disallowFirebaseFallback?: boolean }
+  options?: { disallowFirebaseFallback?: boolean; organizationIdHint?: string }
 ): Promise<RequestContext> {
   const authorizationHeader =
     typeof req.rawRequest?.headers?.authorization === 'string'
@@ -191,6 +206,11 @@ export async function resolveRequestContextFromCallable(
         ? req.data.sessionToken
         : undefined;
 
+  const dataHint =
+    typeof req.data?.organizationIdHint === 'string'
+      ? req.data.organizationIdHint
+      : undefined;
+
   return resolveRequestContext({
     authorizationHeader,
     clerkToken,
@@ -198,6 +218,7 @@ export async function resolveRequestContextFromCallable(
       ? { uid: req.auth.uid, token: (req.auth.token || {}) as Record<string, unknown> }
       : null,
     disallowFirebaseFallback: options?.disallowFirebaseFallback,
+    organizationIdHint: options?.organizationIdHint || dataHint,
   });
 }
 

@@ -8,8 +8,11 @@
     "apps/*"
   ],
   "overrides": {
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.3"
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "@types/react": "~19.1.10",
+    "@types/react-dom": "~19.1.7",
+    "@react-native-async-storage/async-storage": "$@react-native-async-storage/async-storage"
   },
   "scripts": {
     "start": "expo start",
@@ -19,7 +22,10 @@
     "web:dashboard": "npm run dev --workspace=@seren/web",
     "build": "npm run build --workspace=@seren/web",
     "domain:build": "npm run build --workspace=@seren/domain",
-    "server": "echo \"Local Node server is deprecated; use Firebase emulators\"",
+    "server": "echo \"Local Node server is deprecated for Firebase features; Express SOS regression: cd server && node index.js\"",
+    "probe:golden-path": "npm run probe:golden-path --prefix firebase/functions",
+    "regress:express-sos": "node scripts/express-sos-regression.js",
+    "lab:usb": "bash scripts/lab-usb-start.sh",
     "firebase:emulators": "firebase emulators:start --config firebase/firebase.json",
     "firebase:functions:build": "npm --prefix firebase/functions run build",
     "firebase:functions:serve": "npm --prefix firebase/functions run serve",
@@ -49,24 +55,27 @@
     "expo-location": "~19.0.7",
     "expo-media-library": "~18.2.0",
     "expo-notifications": "^0.32.12",
-    "expo-secure-store": "^57.0.1",
+    "expo-secure-store": "~15.0.8",
     "expo-sms": "~14.0.7",
     "expo-status-bar": "~3.0.8",
-    "expo-web-browser": "^57.0.2",
+    "expo-web-browser": "~15.0.11",
     "firebase": "^11.10.0",
-    "react": "^19.1.0",
-    "react-native": "^0.81.5",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
     "react-native-maps": "1.20.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0"
   },
   "devDependencies": {
     "@expo/cli": "^54.0.14",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.3",
+    "@types/react": "~19.1.10",
+    "@types/react-dom": "~19.1.7",
     "@types/react-native": "^0.72.8",
     "babel-preset-expo": "~54.0.0",
     "firebase-tools": "^14.5.0",
     "typescript": "~5.9.2"
+  },
+  "optionalDependencies": {
+    "utf-8-validate": "^5.0.10"
   }
 }

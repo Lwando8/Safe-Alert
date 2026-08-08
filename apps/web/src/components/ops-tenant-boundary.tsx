@@ -3,7 +3,6 @@
 import {
   createContext,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -65,15 +64,14 @@ function OpsTenantBoundaryAuthed({ children }: { children: ReactNode }) {
     ? 'signed_out'
     : orgSlug || organization?.slug || orgId || 'none';
 
-  const [tenantEpoch, setTenantEpoch] = useState(0);
   const [prevKey, setPrevKey] = useState(activeOrgKey);
+  const [tenantEpoch, setTenantEpoch] = useState(0);
 
-  useEffect(() => {
-    if (activeOrgKey !== prevKey) {
-      setPrevKey(activeOrgKey);
-      setTenantEpoch(e => e + 1);
-    }
-  }, [activeOrgKey, prevKey]);
+  // Adjust state during render when org key changes (React-recommended; avoids setState-in-effect).
+  if (activeOrgKey !== prevKey) {
+    setPrevKey(activeOrgKey);
+    setTenantEpoch(e => e + 1);
+  }
 
   const value = useMemo(
     () => ({
@@ -87,7 +85,6 @@ function OpsTenantBoundaryAuthed({ children }: { children: ReactNode }) {
 
   return (
     <OpsTenantBoundaryContext.Provider value={value}>
-      {/* Key forces full remount of ops page trees on org switch / sign-out */}
       <div
         key={`${activeOrgKey}:${tenantEpoch}`}
         data-ops-tenant-key={activeOrgKey}

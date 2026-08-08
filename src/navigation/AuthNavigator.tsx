@@ -1,8 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../types';
 import { UserRole } from '../types/auth';
+import {
+  isLegacyExpressLoginAllowed,
+  resolveMobileAuthMode,
+} from '../auth/clerkMobileConfig';
 import AuthEntryScreen from '../screens/AuthEntryScreen';
+import ClerkSignInScreen from '../screens/ClerkSignInScreen';
 import LoginScreen from '../screens/LoginScreen';
 import ResponderLoginScreen from '../screens/ResponderLoginScreen';
 import AdminLoginScreen from '../screens/AdminLoginScreen';
@@ -16,6 +21,25 @@ interface AuthNavigatorProps {
 }
 
 export default function AuthNavigator({ onAuthenticate }: AuthNavigatorProps) {
+  const clerkMode = resolveMobileAuthMode() === 'clerk';
+  const [showLegacy, setShowLegacy] = useState(!clerkMode);
+
+  if (clerkMode && !showLegacy) {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="AuthEntry">
+          {() => (
+            <ClerkSignInScreen
+              onLegacyLogin={
+                isLegacyExpressLoginAllowed() ? () => setShowLegacy(true) : undefined
+              }
+            />
+          )}
+        </Stack.Screen>
+      </Stack.Navigator>
+    );
+  }
+
   return (
     <Stack.Navigator
       initialRouteName="AuthEntry"

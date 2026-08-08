@@ -12,6 +12,8 @@ import MapView, { Circle, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../context/AuthContext';
+import { usePlatformSession } from '../../context/PlatformSessionContext';
+import { resolveResponderBranchVisibility } from '../../auth/responderBranches';
 import {
   MAP_STATUS_COLORS,
   MAP_STATUS_LABELS,
@@ -47,6 +49,8 @@ function typeLabel(type: string) {
 
 export default function ResponderMapScreen({ navigation, profile, onShiftEnded }: Props) {
   const { signOut } = useAuth();
+  const platform = usePlatformSession();
+  const branches = resolveResponderBranchVisibility(platform.capabilities);
   const mapRef = useRef<MapView>(null);
   const [position, setPosition] = useState<{ latitude: number; longitude: number } | null>(null);
   const [incidents, setIncidents] = useState<MapNearbyIncident[]>([]);
@@ -240,12 +244,22 @@ export default function ResponderMapScreen({ navigation, profile, onShiftEnded }
           </Text>
         </View>
         <View style={styles.topActions}>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => navigation.navigate('ResponderAssignments')}
-          >
-            <Text style={styles.iconBtnText}>Jobs</Text>
-          </TouchableOpacity>
+          {branches.showIncidentJobs ? (
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={() => navigation.navigate('ResponderAssignments')}
+            >
+              <Text style={styles.iconBtnText}>Jobs</Text>
+            </TouchableOpacity>
+          ) : null}
+          {branches.showWorkOrders ? (
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={() => navigation.navigate('ResponderWorkOrders')}
+            >
+              <Text style={styles.iconBtnText}>WOs</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             style={styles.iconBtn}
             onPress={async () => {

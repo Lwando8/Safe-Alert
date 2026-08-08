@@ -19,7 +19,13 @@ function extractBearer(authorizationHeader) {
     }
     return authorizationHeader.substring(7);
 }
-async function buildFromClerkToken(token) {
+/**
+ * Resolve Clerk JWT → RequestContext.
+ * Prefer Clerk session org when present; otherwise resolve membership from
+ * Firestore (platform-authoritative) so mobile sessions without an active
+ * Clerk Organization still work.
+ */
+async function buildFromClerkToken(token, organizationIdHint) {
     let session;
     try {
         session = (await clerk.verifyToken(token, {
@@ -35,26 +41,29 @@ async function buildFromClerkToken(token) {
     const userId = session.sub;
     const orgId = session.org_id;
     const orgRole = session.org_role;
-    if (!orgId || !orgRole) {
-        throw new https_1.HttpsError('failed-precondition', 'User must belong to an organization. Please select an organization.');
-    }
-    let organization;
-    try {
-        organization = await clerk.organizations.getOrganization({
-            organizationId: orgId,
-        });
-    }
-    catch (err) {
-        console.error('Failed to fetch organization:', err);
-        throw new https_1.HttpsError('internal', 'Failed to fetch organization details');
-    }
-    const organizationId = String(organization.slug || organization.id);
-    if (!organizationId) {
-        throw new https_1.HttpsError('internal', 'Organization is missing slug/id');
+    let organizationId;
+    let clerkOrganizationId = orgId || '';
+    if (orgId) {
+        try {
+            const organization = await clerk.organizations.getOrganization({
+                organizationId: orgId,
+            });
+            organizationId = String(organization.slug || organization.id);
+            if (!organizationId) {
+                throw new https_1.HttpsError('internal', 'Organization is missing slug/id');
+            }
+        }
+        catch (err) {
+            if (err instanceof https_1.HttpsError)
+                throw err;
+            console.error('Failed to fetch organization:', err);
+            throw new https_1.HttpsError('internal', 'Failed to fetch organization details');
+        }
     }
     const membership = await (0, membershipLoader_1.loadActiveMembershipForUser)({
         userId,
         organizationId,
+        organizationIdHint: organizationId ? undefined : organizationIdHint,
     });
     let isPlatformOperator = false;
     try {
@@ -71,13 +80,13 @@ async function buildFromClerkToken(token) {
     return {
         authUserId: userId,
         userId,
-        organizationId,
-        clerkOrganizationId: orgId,
+        organizationId: membership.data.organizationId,
+        clerkOrganizationId: membership.data.clerkOrganizationId || clerkOrganizationId,
         membershipId: membership.id,
         siteId: membership.data.siteId || '',
         zoneIds: membership.data.zoneIds,
         role: membership.data.kind,
-        clerkRole: orgRole,
+        clerkRole: orgRole || membership.data.clerkRole || '',
         permissions: membership.data.permissions || [],
         isPlatformOperator,
         authProvider: 'clerk',
@@ -92,7 +101,7 @@ async function resolveRequestContext(source) {
     const clerkToken = source.clerkToken || bearer;
     if (clerkToken) {
         try {
-            return await buildFromClerkToken(clerkToken);
+            return await buildFromClerkToken(clerkToken, source.organizationIdHint);
         }
         catch (err) {
             // If token was explicitly a Clerk token from data, don't fall through on auth errors
@@ -118,7 +127,9 @@ async function resolveRequestContext(source) {
     if (!source.firebaseAuth?.uid) {
         throw new https_1.HttpsError('unauthenticated', 'Authentication required');
     }
-    return (0, firebaseLegacyAdapter_1.resolveFromFirebaseLegacy)(source.firebaseAuth);
+    return (0, firebaseLegacyAdapter_1.resolveFromFirebaseLegacy)(source.firebaseAuth, {
+        organizationIdHint: source.organizationIdHint,
+    });
 }
 /**
  * Convenience for Firebase callable handlers on the Phase 2B migrated surface.
@@ -132,6 +143,9 @@ async function resolveRequestContextFromCallable(req, options) {
         : typeof req.data?.sessionToken === 'string'
             ? req.data.sessionToken
             : undefined;
+    const dataHint = typeof req.data?.organizationIdHint === 'string'
+        ? req.data.organizationIdHint
+        : undefined;
     return resolveRequestContext({
         authorizationHeader,
         clerkToken,
@@ -139,6 +153,7 @@ async function resolveRequestContextFromCallable(req, options) {
             ? { uid: req.auth.uid, token: (req.auth.token || {}) }
             : null,
         disallowFirebaseFallback: options?.disallowFirebaseFallback,
+        organizationIdHint: options?.organizationIdHint || dataHint,
     });
 }
 /**
