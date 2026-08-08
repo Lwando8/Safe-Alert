@@ -88,6 +88,8 @@ export type ResponderStackParamList = {
   ResponderMap: undefined;
   ResponderAssignments: undefined;
   ResponderAlertDetail: { alertId: string };
+  ResponderWorkOrders: undefined;
+  ResponderWorkOrderDetail: { workOrderId: string };
 };
 
 export type AdminStackParamList = {

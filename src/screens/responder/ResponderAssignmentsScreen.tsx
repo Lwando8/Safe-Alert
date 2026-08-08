@@ -147,6 +147,9 @@ export default function ResponderAssignmentsScreen({ navigation, profile, onShif
           </Text>
         </View>
         <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => navigation.navigate('ResponderWorkOrders')}>
+            <Text style={styles.link}>Work orders</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('ResponderMap')}>
             <Text style={styles.link}>Map</Text>
           </TouchableOpacity>

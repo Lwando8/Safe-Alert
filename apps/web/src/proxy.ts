@@ -1,5 +1,5 @@
 import { clerkMiddleware, createRouteMatcher, clerkClient } from '@clerk/nextjs/server'
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
 import {
   isClerkConfigured,
   readPlatformAdminFlag,
@@ -92,7 +92,7 @@ const clerkAuthMiddleware = clerkMiddleware(async (auth, req) => {
 })
 
 /** Pass-through until Clerk keys exist — keeps Phase 1 shells usable. */
-function passthroughMiddleware(_req: NextRequest) {
+function passthroughMiddleware() {
   return NextResponse.next()
 }
 

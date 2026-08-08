@@ -5,6 +5,7 @@ exports.loadIncidentInTenant = loadIncidentInTenant;
 exports.createTenantIncident = createTenantIncident;
 exports.listTenantIncidents = listTenantIncidents;
 exports.registerTenantPushToken = registerTenantPushToken;
+exports.revokeTenantPushToken = revokeTenantPushToken;
 const https_1 = require("firebase-functions/v2/https");
 const requestContext_1 = require("../middleware/requestContext");
 const firebaseApps_1 = require("../firebaseApps");
@@ -127,20 +128,44 @@ async function registerTenantPushToken(context, input) {
     const devicePayload = {
         token: String(input.token),
         userId: context.userId,
+        personId: context.userId,
         organizationId: context.organizationId,
         authProvider: context.authProvider,
         installationId: String(input.deviceId),
+        deviceId: String(input.deviceId),
         environment,
+        platform: input.platform ? String(input.platform) : null,
+        clientType: input.clientType ? String(input.clientType) : 'mobile',
+        appId: input.appId ? String(input.appId) : null,
+        status: 'active',
+        revokedAt: null,
         updatedAt: now,
+        createdAt: now,
     };
     await db.doc(`fcmTokens/${actorUid(context)}/devices/${String(input.deviceId)}`).set(devicePayload, {
         merge: true,
     });
     await db
         .doc(`orgDevices/${context.organizationId}/tokens/${actorUid(context)}_${String(input.deviceId)}`)
-        .set({
-        ...devicePayload,
-        deviceId: String(input.deviceId),
-    }, { merge: true });
+        .set(devicePayload, { merge: true });
     return { ok: true, organizationId: context.organizationId, environment };
+}
+async function revokeTenantPushToken(context, input) {
+    if (!input.deviceId) {
+        throw new https_1.HttpsError('invalid-argument', 'deviceId required');
+    }
+    const now = Date.now();
+    const deviceId = String(input.deviceId);
+    const uid = actorUid(context);
+    const patch = {
+        status: 'revoked',
+        revokedAt: now,
+        updatedAt: now,
+        token: null,
+    };
+    await db.doc(`fcmTokens/${uid}/devices/${deviceId}`).set(patch, { merge: true });
+    await db
+        .doc(`orgDevices/${context.organizationId}/tokens/${uid}_${deviceId}`)
+        .set(patch, { merge: true });
+    return { ok: true, organizationId: context.organizationId, deviceId };
 }

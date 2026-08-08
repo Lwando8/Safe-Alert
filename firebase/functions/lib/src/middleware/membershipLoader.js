@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.classifyMembershipAccess = classifyMembershipAccess;
 exports.loadActiveMembershipForUser = loadActiveMembershipForUser;
 const https_1 = require("firebase-functions/v2/https");
 const firebaseApps_1 = require("../firebaseApps");
@@ -19,6 +20,42 @@ function asMembershipRecord(id, raw) {
         permissions: Array.isArray(raw.permissions) ? raw.permissions : [],
         responderProfile: raw.responderProfile,
     };
+}
+/**
+ * Classify non-active membership access for explicit mobile session states.
+ */
+async function classifyMembershipAccess(userId) {
+    const snap = await db
+        .collection('memberships')
+        .where('userId', '==', userId)
+        .limit(25)
+        .get();
+    if (snap.empty) {
+        return { state: 'no_membership' };
+    }
+    const rows = snap.docs.map(doc => ({
+        id: doc.id,
+        data: asMembershipRecord(doc.id, doc.data()),
+    }));
+    const pending = rows.find(r => r.data.status === 'invited' || r.data.status === 'pending');
+    if (pending) {
+        return {
+            state: 'pending_access',
+            membershipId: pending.id,
+            organizationId: pending.data.organizationId,
+            status: pending.data.status,
+        };
+    }
+    const revoked = rows.find(r => r.data.status === 'revoked' || r.data.status === 'suspended');
+    if (revoked) {
+        return {
+            state: 'revoked',
+            membershipId: revoked.id,
+            organizationId: revoked.data.organizationId,
+            status: revoked.data.status,
+        };
+    }
+    return { state: 'no_membership' };
 }
 /**
  * Load exactly one active membership for a user.

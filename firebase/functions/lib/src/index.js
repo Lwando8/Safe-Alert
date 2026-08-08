@@ -33,8 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.issueFirebaseBridgeTokenCallable = exports.listRideSafetyRequestsCallable = exports.createRideSafetyRequestCallable = exports.getMyServicesCallable = exports.listAnalyticsEventsCallable = exports.updateOrgTenantSettings = exports.getOrgTenantSettings = exports.retractBroadcastCallable = exports.listBroadcastsCallable = exports.createBroadcastCallable = exports.listAlertSightingsCallable = exports.addAlertSightingCallable = exports.resolveCommunityAlertCallable = exports.listCommunityAlertsCallable = exports.createCommunityAlertCallable = exports.listCommunityEventsCallable = exports.createCommunityEventCallable = exports.joinCommunityGroupCallable = exports.listCommunityGroupsCallable = exports.createCommunityGroupCallable = exports.assignOperationalRequestCallable = exports.updateOperationalRequestStatusCallable = exports.listOperationalRequestsCallable = exports.createOperationalRequestCallable = exports.legacyApiProxy = exports.health = exports.unitHeartbeat = exports.endShift = exports.startShift = exports.linkIdentity = exports.bootstrapOrganizationMemberships = exports.onIncidentCreatedNotify = exports.registerPushToken = exports.assignUnitToIncident = exports.updateIncidentStatus = exports.acceptIncident = exports.listOrgIncidents = exports.getNearbyIncidents = exports.appendIncidentLocation = exports.createIncident = exports.loginAdmin = exports.loginResponder = exports.resolveDeviceAccess = exports.registerCitizen = exports.clerkWebhook = void 0;
-const admin = __importStar(require("firebase-admin"));
+exports.issueFirebaseBridgeTokenCallable = exports.listRideSafetyRequestsCallable = exports.createRideSafetyRequestCallable = exports.getMyServicesCallable = exports.listAnalyticsEventsCallable = exports.updateOrgTenantSettings = exports.getOrgTenantSettings = exports.retractBroadcastCallable = exports.listBroadcastsCallable = exports.createBroadcastCallable = exports.listAlertSightingsCallable = exports.addAlertSightingCallable = exports.resolveCommunityAlertCallable = exports.listCommunityAlertsCallable = exports.createCommunityAlertCallable = exports.listCommunityEventsCallable = exports.createCommunityEventCallable = exports.joinCommunityGroupCallable = exports.listCommunityGroupsCallable = exports.createCommunityGroupCallable = exports.updateWorkOrderStatusCallable = exports.getWorkOrderCallable = exports.listMyWorkOrdersCallable = exports.assignOperationalRequestCallable = exports.updateOperationalRequestStatusCallable = exports.listOperationalRequestsCallable = exports.createOperationalRequestCallable = exports.legacyApiProxy = exports.health = exports.unitHeartbeat = exports.endShift = exports.startShift = exports.linkIdentity = exports.bootstrapOrganizationMemberships = exports.onIncidentCreatedNotify = exports.resolvePlatformSessionCallable = exports.revokePushTokenCallable = exports.registerPushToken = exports.assignUnitToIncident = exports.updateIncidentStatus = exports.acceptIncident = exports.listOrgIncidents = exports.getNearbyIncidents = exports.appendIncidentLocation = exports.createIncident = exports.loginAdmin = exports.loginResponder = exports.resolveDeviceAccess = exports.registerCitizen = exports.clerkWebhook = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const requestContext_1 = require("./middleware/requestContext");
@@ -482,12 +481,135 @@ exports.assignUnitToIncident = (0, https_1.onCall)(async (req) => {
 });
 exports.registerPushToken = (0, https_1.onCall)(async (req) => {
     const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
-    const { deviceId, token, environment } = req.data || {};
+    const { deviceId, token, environment, platform, clientType, appId } = req.data || {};
     return (0, tenantIncidentService_1.registerTenantPushToken)(context, {
         deviceId,
         token,
         environment: typeof environment === 'string' ? environment : undefined,
+        platform: typeof platform === 'string' ? platform : undefined,
+        clientType: typeof clientType === 'string' ? clientType : undefined,
+        appId: typeof appId === 'string' ? appId : undefined,
     });
+});
+exports.revokePushTokenCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    const { deviceId } = req.data || {};
+    return (0, tenantIncidentService_1.revokeTenantPushToken)(context, { deviceId });
+});
+/**
+ * Resolve person/org/membership/capabilities for mobile platform session.
+ * Tenant is server-derived — client organizationIdHint only selects among caller's memberships.
+ */
+exports.resolvePlatformSessionCallable = (0, https_1.onCall)(async (req) => {
+    const hint = typeof req.data?.organizationIdHint === 'string' ? req.data.organizationIdHint : undefined;
+    let context;
+    try {
+        context = await (0, requestContext_1.resolveRequestContextFromCallable)(req, {
+            organizationIdHint: hint,
+        });
+    }
+    catch (err) {
+        // Surface pending / revoked / no membership as structured session states for mobile.
+        let clerkUserId = typeof req.data?.clerkUserId === 'string' ? req.data.clerkUserId : null;
+        if (!clerkUserId && typeof req.auth?.uid === 'string') {
+            const uid = String(req.auth.uid);
+            clerkUserId = uid.startsWith('clerk_') ? uid.slice('clerk_'.length) : uid;
+        }
+        if (!clerkUserId) {
+            const token = typeof req.data?.clerkToken === 'string'
+                ? req.data.clerkToken
+                : typeof req.data?.sessionToken === 'string'
+                    ? req.data.sessionToken
+                    : null;
+            if (token) {
+                try {
+                    const { Clerk } = await Promise.resolve().then(() => __importStar(require('@clerk/clerk-sdk-node')));
+                    const clerkSdk = Clerk({ secretKey: process.env.CLERK_SECRET_KEY });
+                    const session = await clerkSdk.verifyToken(token, {
+                        authorizedParties: process.env.CLERK_PUBLISHABLE_KEY
+                            ? [process.env.CLERK_PUBLISHABLE_KEY]
+                            : undefined,
+                    });
+                    clerkUserId = session.sub || null;
+                }
+                catch {
+                    // ignore — fall through to rethrow
+                }
+            }
+        }
+        if (clerkUserId) {
+            const { classifyMembershipAccess } = await Promise.resolve().then(() => __importStar(require('./middleware/membershipLoader')));
+            const access = await classifyMembershipAccess(clerkUserId);
+            return {
+                status: access.state,
+                personId: clerkUserId,
+                organizationId: access.organizationId || null,
+                membershipId: access.membershipId || null,
+                membershipStatus: access.status || null,
+                role: null,
+                permissions: [],
+                modules: [],
+                capabilities: [],
+                unitId: null,
+                canUseUserExperience: false,
+                canUseResponderExperience: false,
+                authProvider: 'clerk',
+                environment: process.env.FUNCTIONS_EMULATOR ? 'emulator' : 'production',
+            };
+        }
+        throw err;
+    }
+    let modules = [];
+    try {
+        const { loadOrgTenantConfig } = await Promise.resolve().then(() => __importStar(require('./services/moduleGate')));
+        const { resolveEffectiveModules } = await Promise.resolve().then(() => __importStar(require('./services/tenantConfig')));
+        const cfg = await loadOrgTenantConfig(context.organizationId);
+        const effective = resolveEffectiveModules(cfg.tenantProfile, cfg.modules);
+        modules = Object.entries(effective)
+            .filter(([, enabled]) => !!enabled)
+            .map(([key]) => key);
+    }
+    catch {
+        modules = [];
+    }
+    const { loadActiveMembershipForUser } = await Promise.resolve().then(() => __importStar(require('./middleware/membershipLoader')));
+    let capabilities = [];
+    try {
+        const mem = await loadActiveMembershipForUser({
+            userId: context.userId,
+            organizationId: context.organizationId,
+        });
+        const rawCaps = mem.data.responderProfile?.capabilities;
+        capabilities = Array.isArray(rawCaps) ? rawCaps.map(String) : [];
+    }
+    catch {
+        capabilities = [];
+    }
+    const { canUseResponderExperience, canUseUserExperience } = await Promise.resolve().then(() => __importStar(require('./services/experienceRouting')));
+    const routingInput = {
+        membershipStatus: 'active',
+        role: context.role,
+        permissions: context.permissions,
+        capabilities,
+        unitId: context.unitId || null,
+    };
+    return {
+        status: 'ready',
+        personId: context.userId,
+        organizationId: context.organizationId,
+        membershipId: context.membershipId,
+        membershipStatus: 'active',
+        role: context.role,
+        permissions: context.permissions,
+        modules,
+        capabilities,
+        unitId: context.unitId || null,
+        canUseUserExperience: canUseUserExperience(routingInput),
+        canUseResponderExperience: canUseResponderExperience(routingInput),
+        siteId: context.siteId,
+        authProvider: context.authProvider,
+        environment: process.env.FUNCTIONS_EMULATOR ? 'emulator' : 'production',
+    };
 });
 exports.onIncidentCreatedNotify = (0, firestore_1.onDocumentCreated)('incidents/{incidentId}', async (event) => {
     const incident = event.data?.data();
@@ -503,19 +625,19 @@ exports.onIncidentCreatedNotify = (0, firestore_1.onDocumentCreated)('incidents/
         .limit(1000)
         .get();
     const tokens = tokenSnap.docs
-        .map(docSnap => docSnap.data().token)
-        .filter(Boolean);
+        .map(docSnap => docSnap.data())
+        .filter(row => row.token && row.status !== 'revoked')
+        .map(row => String(row.token));
     if (!tokens.length)
         return;
-    await admin.messaging().sendEachForMulticast({
-        tokens,
-        notification: {
-            title: `New ${incident.type.toUpperCase()} alert`,
-            body: `Incident ${incident.id} created`,
-        },
+    const { sendOrgPushTokens } = await Promise.resolve().then(() => __importStar(require('./notifications/sendOrgPush')));
+    await sendOrgPushTokens(tokens, {
+        organizationId: String(incident.organizationId),
+        title: `New ${incident.type.toUpperCase()} alert`,
+        body: `Incident ${incident.id} created`,
         data: {
-            incidentId: incident.id,
-            organizationId: incident.organizationId,
+            incidentId: String(incident.id),
+            organizationId: String(incident.organizationId),
             event: 'incident_created',
         },
     });
@@ -754,6 +876,34 @@ exports.assignOperationalRequestCallable = (0, https_1.onCall)(async (req) => {
         slaTargetAt: typeof slaTargetAt === 'number' ? slaTargetAt : null,
         slaHours: typeof slaHours === 'number' ? slaHours : null,
         notes,
+    });
+});
+exports.listMyWorkOrdersCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    const { status, scope, limit } = req.data || {};
+    return (0, tenantRequestService_1.listMyWorkOrders)(context, {
+        status: typeof status === 'string' ? status : undefined,
+        scope: scope === 'assigned_to_me' ||
+            scope === 'my_team' ||
+            scope === 'available' ||
+            scope === 'all_visible'
+            ? scope
+            : undefined,
+        limit: typeof limit === 'number' ? limit : undefined,
+    });
+});
+exports.getWorkOrderCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    return (0, tenantRequestService_1.getWorkOrder)(context, String(req.data?.workOrderId || ''));
+});
+exports.updateWorkOrderStatusCallable = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    const { workOrderId, status, note, resolutionSummary } = req.data || {};
+    return (0, tenantRequestService_1.updateWorkOrderStatus)(context, {
+        workOrderId,
+        status,
+        note,
+        resolutionSummary,
     });
 });
 exports.createCommunityGroupCallable = (0, https_1.onCall)(async (req) => {

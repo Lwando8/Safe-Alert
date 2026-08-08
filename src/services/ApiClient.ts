@@ -62,6 +62,15 @@ let apiBaseUrl = resolveApiBaseUrlSync();
 
 export async function initApiBaseUrl(): Promise<string> {
   try {
+    const fromEnv = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '') || '';
+    // USB adb-reverse lab: prefer env 127.0.0.1 over a stale LAN override in AsyncStorage.
+    const usbLab =
+      /127\.0\.0\.1|localhost/.test(fromEnv) ||
+      /127\.0\.0\.1|localhost/.test(process.env.EXPO_PUBLIC_FUNCTIONS_EMULATOR_HOST || '');
+    if (usbLab && fromEnv) {
+      apiBaseUrl = fromEnv;
+      return apiBaseUrl;
+    }
     const override = await AsyncStorage.getItem(DEV_API_OVERRIDE_KEY);
     if (override?.trim()) {
       apiBaseUrl = buildBaseUrl(override.trim());

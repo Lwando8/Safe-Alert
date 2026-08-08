@@ -84,7 +84,9 @@
         }
       ],
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      "expo-secure-store",
+      "@clerk/expo"
     ],
     "notification": {
       "icon": "./assets/icon.png",

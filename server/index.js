@@ -1,7 +1,25 @@
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
 const { WebSocketServer, WebSocket } = require('ws');
+
+// Load server/.env (Express Clerk compat secrets) without adding a dotenv dependency.
+try {
+  const envPath = path.join(__dirname, '.env');
+  if (fs.existsSync(envPath)) {
+    for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) continue;
+      const eq = trimmed.indexOf('=');
+      const key = trimmed.slice(0, eq).trim();
+      const value = trimmed.slice(eq + 1).trim();
+      if (key && process.env[key] === undefined) process.env[key] = value;
+    }
+  }
+} catch {
+  // ignore
+}
 
 const { seedIfEmpty } = require('./lib/seed');
 const dispatch = require('./lib/dispatch');

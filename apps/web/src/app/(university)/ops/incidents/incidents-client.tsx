@@ -150,19 +150,26 @@ function IncidentsClientAuthed({
   }, []);
 
   useEffect(() => {
-    if (!isSignedIn) {
-      setState({
-        kind: 'error',
-        code: 'unauthenticated',
-        message: 'Signed out. Incident data cleared.',
-      });
-      return;
-    }
-    setState({ kind: 'loading' });
-    void load();
+    if (!isSignedIn) return;
+    const timer = window.setTimeout(() => {
+      setState({ kind: 'loading' });
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [activeOrgKey, tenantEpoch, isSignedIn, load]);
 
-  if (state.kind === 'loading') {
+  // Clear tenant data on sign-out without setState-in-effect
+  const signedOutState =
+    !isSignedIn
+      ? ({
+          kind: 'error' as const,
+          code: 'unauthenticated' as const,
+          message: 'Signed out. Incident data cleared.',
+        })
+      : null;
+  const viewState = signedOutState || state;
+
+  if (viewState.kind === 'loading') {
     return (
       <StateCard
         title="Loading incidents…"
@@ -171,17 +178,17 @@ function IncidentsClientAuthed({
     );
   }
 
-  if (state.kind === 'error') {
+  if (viewState.kind === 'error') {
     return (
       <StateCard
-        title={titleForCode(state.code)}
-        description={state.message}
+        title={titleForCode(viewState.code)}
+        description={viewState.message}
         action={
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => void load()}>
               Retry
             </Button>
-            {state.code === 'unauthenticated' ? (
+            {viewState.code === 'unauthenticated' ? (
               <Button type="button" variant="secondary" onClick={() => void signOut()}>
                 Confirm sign out
               </Button>
@@ -192,8 +199,8 @@ function IncidentsClientAuthed({
     );
   }
 
-  const organizationId = state.organizationId;
-  const incidents = state.kind === 'ready' ? state.incidents : [];
+  const organizationId = viewState.organizationId;
+  const incidents = viewState.kind === 'ready' ? viewState.incidents : [];
   const showOrgDiagnostics = process.env.NODE_ENV === 'development';
 
   return (
@@ -217,7 +224,7 @@ function IncidentsClientAuthed({
         </p>
       ) : null}
 
-      {state.kind === 'empty' ? (
+      {viewState.kind === 'empty' ? (
         <StateCard
           title="No incidents"
           description={`No incidents found for organization ${organizationId}.`}

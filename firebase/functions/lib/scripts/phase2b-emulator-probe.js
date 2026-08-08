@@ -160,10 +160,38 @@ async function main() {
         .limit(1)
         .get();
     record('suspended-membership', suspended.empty, 'Suspended membership not treated as active');
+    // Ensure orgDevices fixtures exist (idempotent) so push-isolation does not
+    // fail when seed was skipped or partially applied.
+    await db.doc('orgDevices/university-a/tokens/firebase_uid_a_deviceA').set({
+        token: 'token_university_a',
+        userId: 'user_clerk_a',
+        organizationId: 'university-a',
+        deviceId: 'deviceA',
+        environment: 'emulator',
+        status: 'active',
+        updatedAt: Date.now(),
+    }, { merge: true });
+    await db.doc('orgDevices/university-b/tokens/firebase_uid_b_deviceB').set({
+        token: 'token_university_b',
+        userId: 'user_clerk_b',
+        organizationId: 'university-b',
+        deviceId: 'deviceB',
+        environment: 'emulator',
+        status: 'active',
+        updatedAt: Date.now(),
+    }, { merge: true });
     const tokensA = await db.collection('orgDevices/university-a/tokens').get();
     const tokensB = await db.collection('orgDevices/university-b/tokens').get();
     const aHasB = tokensA.docs.some(d => d.data().token === 'token_university_b');
-    record('push-isolation', !aHasB && tokensA.size >= 1 && tokensB.size >= 1, `A tokens=${tokensA.size}, B tokens=${tokensB.size}, A has B token=${aHasB}`);
+    const aActive = tokensA.docs.filter(d => {
+        const row = d.data();
+        return row.token && row.status !== 'revoked';
+    });
+    const bActive = tokensB.docs.filter(d => {
+        const row = d.data();
+        return row.token && row.status !== 'revoked';
+    });
+    record('push-isolation', !aHasB && aActive.length >= 1 && bActive.length >= 1, `A tokens=${aActive.length}, B tokens=${bActive.length}, A has B token=${aHasB}`);
     const prev = process.env.ALLOW_FIREBASE_AUTH_FALLBACK;
     process.env.ALLOW_FIREBASE_AUTH_FALLBACK = 'false';
     record('fallback-disable', isFirebaseAuthFallbackEnabled() === false, 'ALLOW_FIREBASE_AUTH_FALLBACK=false disables Firebase fallback');

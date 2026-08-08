@@ -14,17 +14,19 @@ export type FirebaseAuthLike = {
  * membership status or permissions.
  */
 export async function resolveFromFirebaseLegacy(
-  auth: FirebaseAuthLike
+  auth: FirebaseAuthLike,
+  options?: { organizationIdHint?: string }
 ): Promise<RequestContext> {
   const link = await IdentityLinkService.resolveByFirebaseUid(auth.uid);
   const claimOrg =
     typeof auth.token.organizationId === 'string' && auth.token.organizationId
       ? String(auth.token.organizationId)
       : undefined;
+  const organizationIdHint = options?.organizationIdHint || claimOrg;
 
   const membership = await loadActiveMembershipForUser({
     userId: link.userId,
-    organizationIdHint: claimOrg,
+    organizationIdHint,
   });
 
   // Platform operators must authenticate via Clerk — never elevate from Firebase claims alone.

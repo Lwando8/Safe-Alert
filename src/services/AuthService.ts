@@ -185,6 +185,18 @@ export async function persistSession(session: AuthSession): Promise<void> {
   } else {
     await AsyncStorage.removeItem(ACTIVE_SHIFT_KEY);
   }
+
+  // Central Firebase/platform bridge — best-effort; Express SOS stays independent.
+  // Prefer org from responder unit when present; otherwise PlatformClient resolves membership.
+  try {
+    const { establishPlatformBridge } = await import('./PlatformClient');
+    await establishPlatformBridge({
+      registerDevice: true,
+      organizationIdHint: session.unit?.organizationId || session.user.providerId || null,
+    });
+  } catch (err) {
+    console.warn('Platform bridge bootstrap deferred', err);
+  }
 }
 
 export async function loadStoredSession(): Promise<{
@@ -200,6 +212,17 @@ export async function loadStoredSession(): Promise<{
 }
 
 export async function clearSession(): Promise<void> {
+  try {
+    const { clearPlatformSession } = await import('./PlatformClient');
+    await clearPlatformSession();
+  } catch {
+    try {
+      const { clearFirebaseBridgeSession } = await import('./FirebaseCallables');
+      await clearFirebaseBridgeSession();
+    } catch {
+      // Firebase may be unavailable in some test environments
+    }
+  }
   await AsyncStorage.multiRemove([
     AUTH_TOKEN_KEY,
     USER_ROLE_KEY,
@@ -210,13 +233,11 @@ export async function clearSession(): Promise<void> {
     'user',
     'firebaseCustomToken',
     'clerkSessionToken',
+    'clerkSessionEmail',
+    'platformActiveOrgId',
+    'platformRegisteredDeviceId',
+    'platformLastExperience',
   ]);
-  try {
-    const { clearFirebaseBridgeSession } = await import('./FirebaseCallables');
-    await clearFirebaseBridgeSession();
-  } catch {
-    // Firebase may be unavailable in some test environments
-  }
 }
 
 export async function loadResponderProfile(): Promise<ResponderProfile | null> {

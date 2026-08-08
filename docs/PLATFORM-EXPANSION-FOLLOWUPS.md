@@ -55,7 +55,7 @@ Clerk mobile prep remains **off** by default (`PHASE2G-MOBILE-CLERK-PREP.md`).
 
 - Composite indexes for requests / workOrders / community / broadcasts / analytics
 - `/ops/requests` assign + status transitions (Admin SDK, tenant-stamped)
-- `notifyOrgEvent` sends FCM via `sendEachForMulticast` (same stack as incident create) + outbox audit
+- `notifyOrgEvent` / incident create notify use `sendOrgPushTokens` (Expo Push API + FCM partition) + outbox audit
 
 ## 4. Polish
 

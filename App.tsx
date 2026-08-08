@@ -5,7 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from './src/context/ThemeContext';
 import RootNavigator from './src/navigation/RootNavigator';
 import { initApiBaseUrl } from './src/services/ApiClient';
-import { ClerkMobilePrepBoundary } from './src/auth/ClerkMobilePrepBoundary';
+import { ClerkProviderBoundary } from './src/auth/ClerkProviderBoundary';
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -24,12 +24,12 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <ClerkMobilePrepBoundary>
+      <ClerkProviderBoundary>
         <ThemeProvider>
           <StatusBar style="auto" />
           <RootNavigator />
         </ThemeProvider>
-      </ClerkMobilePrepBoundary>
+      </ClerkProviderBoundary>
     </SafeAreaProvider>
   );
 }

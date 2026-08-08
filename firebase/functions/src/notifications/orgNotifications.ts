@@ -1,11 +1,12 @@
 import { getDb } from '../firebaseApps';
-import * as admin from 'firebase-admin';
+import { sendOrgPushTokens } from './sendOrgPush';
 
 const db = getDb();
 
 /**
- * Org notification fan-out using existing orgDevices token layout + FCM multicast.
- * Queues outbox records for audit; sends via the same messaging path as incident_created.
+ * Org notification fan-out using orgDevices token layout.
+ * Expo tokens → Expo Push API; native FCM tokens → Admin FCM.
+ * Queues outbox records for audit.
  */
 export async function notifyOrgEvent(input: {
   organizationId: string;
@@ -24,8 +25,9 @@ export async function notifyOrgEvent(input: {
 
     const tokens: string[] = [];
     for (const doc of tokensSnap.docs) {
-      const data = doc.data() as { token?: string; userId?: string };
+      const data = doc.data() as { token?: string; userId?: string; status?: string };
       if (!data.token) continue;
+      if (data.status === 'revoked') continue;
       if (input.targetUserId && data.userId && data.userId !== input.targetUserId) continue;
       tokens.push(String(data.token));
     }
@@ -52,27 +54,17 @@ export async function notifyOrgEvent(input: {
     }
     await batch.commit();
 
-    // Real FCM send — same stack as onIncidentCreatedNotify (no new provider)
-    let sent = 0;
-    try {
-      const response = await admin.messaging().sendEachForMulticast({
-        tokens: slice,
-        notification: {
-          title: input.title,
-          body: input.body,
-        },
-        data: {
-          organizationId: input.organizationId,
-          event: input.kind,
-          ...(input.data || {}),
-        },
-      });
-      sent = response.successCount;
-    } catch (err) {
-      console.error('notifyOrgEvent FCM send failed', err);
-    }
+    const result = await sendOrgPushTokens(slice, {
+      organizationId: input.organizationId,
+      title: input.title,
+      body: input.body,
+      data: {
+        event: input.kind,
+        ...(input.data || {}),
+      },
+    });
 
-    return { attempted: slice.length, sent };
+    return { attempted: result.attempted, sent: result.sent };
   } catch (err) {
     console.error('notifyOrgEvent failed', err);
     return { attempted: 0, sent: 0 };

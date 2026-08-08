@@ -1,6 +1,8 @@
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getExpoProjectId, registerCurrentDevice } from './PlatformClient';
 
 interface EmergencyContact {
   id: string;
@@ -10,39 +12,120 @@ interface EmergencyContact {
 }
 
 interface NotificationData {
-  type: 'emergency_alert';
-  alertType: string;
+  type: 'emergency_alert' | string;
+  alertType?: string;
   location?: {
     latitude: number;
     longitude: number;
   };
-  timestamp: number;
-  contactName: string;
-  urgency: 'critical' | 'high' | 'normal';
+  timestamp?: number;
+  contactName?: string;
+  urgency?: 'critical' | 'high' | 'normal';
+  organizationId?: string;
+  incidentId?: string;
+  workOrderId?: string;
+  requestId?: string;
+  event?: string;
 }
 
-// Configure notification behavior
-Notifications.setNotificationHandler({
-  handleNotification: async (notification) => {
-    const data = notification.request.content.data as NotificationData;
-    
-    // Critical emergency notifications should always show
-    if (data?.urgency === 'critical') {
+export type PushDeepLinkPayload = {
+  organizationId?: string;
+  incidentId?: string;
+  workOrderId?: string;
+  requestId?: string;
+  event?: string;
+  type?: string;
+};
+
+/** Expo Go (SDK 53+) cannot register remote push — soft-skip instead of crashing. */
+function isExpoGoClient(): boolean {
+  return Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+}
+
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async notification => {
+      const data = notification.request.content.data as unknown as Partial<NotificationData>;
+
+      if (data?.urgency === 'critical') {
+        return {
+          shouldShowAlert: true,
+          shouldShowBanner: true,
+          shouldShowList: true,
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+          priority: Notifications.AndroidNotificationPriority.MAX,
+        };
+      }
+
       return {
         shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
         shouldPlaySound: true,
-        shouldSetBadge: true,
-        priority: Notifications.AndroidNotificationPriority.MAX,
+        shouldSetBadge: false,
       };
+    },
+  });
+} catch (err) {
+  console.warn('Notification handler setup skipped', err);
+}
+
+/**
+ * Validate push deep-link against active org — fail closed on tenant mismatch.
+ */
+export function validatePushDeepLink(
+  data: PushDeepLinkPayload | null | undefined,
+  activeOrgId: string | null
+): { ok: true; payload: PushDeepLinkPayload } | { ok: false; reason: string } {
+  if (!data) return { ok: false, reason: 'empty_payload' };
+  const orgId = data.organizationId ? String(data.organizationId) : null;
+  if (orgId && activeOrgId && orgId !== activeOrgId) {
+    return { ok: false, reason: 'organization_mismatch' };
+  }
+  if (
+    !data.incidentId &&
+    !data.workOrderId &&
+    !data.requestId &&
+    data.type !== 'emergency_alert'
+  ) {
+    return { ok: false, reason: 'missing_target' };
+  }
+  return { ok: true, payload: data };
+}
+
+/**
+ * Foreground / background / cold-start push routing with org validation.
+ */
+export function setupPushDeepLinkHandlers(options: {
+  getActiveOrgId: () => Promise<string | null>;
+  onNavigate: (payload: PushDeepLinkPayload) => void;
+}): () => void {
+  const handle = async (data: PushDeepLinkPayload | undefined) => {
+    const activeOrgId = await options.getActiveOrgId();
+    const result = validatePushDeepLink(data, activeOrgId);
+    if (!result.ok) {
+      console.warn('Push deep link rejected', result.reason, data);
+      return;
     }
-    
-    return {
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    };
-  },
-});
+    options.onNavigate(result.payload);
+  };
+
+  const responseSub = Notifications.addNotificationResponseReceivedListener(response => {
+    const data = response.notification.request.content.data as PushDeepLinkPayload;
+    void handle(data);
+  });
+
+  void Notifications.getLastNotificationResponseAsync().then(response => {
+    if (!response) return;
+    const data = response.notification.request.content.data as PushDeepLinkPayload;
+    void handle(data);
+  });
+
+  return () => {
+    responseSub.remove();
+  };
+}
 
 class NotificationService {
   private static instance: NotificationService;
@@ -62,15 +145,9 @@ class NotificationService {
 
   private async initializeNotifications(): Promise<void> {
     try {
-      // Request permissions
       await this.requestNotificationPermissions();
-      
-      // Get push token
       await this.registerForPushNotifications();
-      
-      // Configure notification categories for emergency alerts
       await this.setupNotificationCategories();
-      
     } catch (error) {
       console.error('Error initializing notifications:', error);
     }
@@ -87,8 +164,7 @@ class NotificationService {
             allowAlert: true,
             allowBadge: true,
             allowSound: true,
-            allowCriticalAlerts: true, // Critical alerts bypass Do Not Disturb
-            allowAnnouncements: true,
+            allowCriticalAlerts: true,
           },
           android: {
             allowAlert: true,
@@ -109,21 +185,31 @@ class NotificationService {
 
   private async registerForPushNotifications(): Promise<string | null> {
     try {
+      if (isExpoGoClient()) {
+        console.warn('Skipping remote push token registration in Expo Go (use a development build)');
+        return null;
+      }
+
       if (!this.notificationPermission) {
         console.log('Notification permission not granted');
         return null;
       }
 
-      const token = await Notifications.getExpoPushTokenAsync({
-        // EAS project id from app.json → expo.extra.eas.projectId
-        projectId: 'f9205a74-28bb-4abb-b289-13699fe0b32d',
-      });
+      const projectId = getExpoProjectId();
+      if (!projectId) {
+        console.warn('EAS projectId missing — cannot register Expo push token');
+        return null;
+      }
+
+      const token = await Notifications.getExpoPushTokenAsync({ projectId });
 
       this.expoPushToken = token.data;
-      
-      // Store token for emergency contacts to use
       await AsyncStorage.setItem('expoPushToken', this.expoPushToken);
-      
+
+      await registerCurrentDevice(this.expoPushToken).catch(err => {
+        console.warn('orgDevices registration deferred until platform bridge is ready', err);
+      });
+
       console.log('Expo push token:', this.expoPushToken);
       return this.expoPushToken;
     } catch (error) {
@@ -132,22 +218,33 @@ class NotificationService {
     }
   }
 
+  public async syncOrgDeviceRegistration(): Promise<void> {
+    if (!this.expoPushToken) {
+      await this.registerForPushNotifications();
+      return;
+    }
+    await registerCurrentDevice(this.expoPushToken);
+  }
+
   private async setupNotificationCategories(): Promise<void> {
     try {
       await Notifications.setNotificationCategoryAsync('emergency_alert', [
         {
           identifier: 'respond',
           buttonTitle: 'Respond',
-          options: {
-            opensAppToForeground: true,
-          },
+          options: { opensAppToForeground: true },
         },
         {
           identifier: 'call_emergency',
           buttonTitle: 'Call 10111',
-          options: {
-            opensAppToForeground: false,
-          },
+          options: { opensAppToForeground: false },
+        },
+      ]);
+      await Notifications.setNotificationCategoryAsync('work_order', [
+        {
+          identifier: 'open_work_order',
+          buttonTitle: 'Open',
+          options: { opensAppToForeground: true },
         },
       ]);
     } catch (error) {
@@ -166,29 +263,19 @@ class NotificationService {
         return 0;
       }
 
-      // Load emergency contacts
-      const savedContacts = await AsyncStorage.getItem('emergencyContacts');
-      if (!savedContacts) {
+      const contactsData = await AsyncStorage.getItem('emergencyContacts');
+      if (!contactsData) {
         console.log('No emergency contacts found');
         return 0;
       }
 
-      const contacts: EmergencyContact[] = JSON.parse(savedContacts);
-      if (contacts.length === 0) {
-        return 0;
-      }
-
-      const senderName = userName || 'Emergency Contact';
-      let locationText = '';
-      
-      if (location) {
-        locationText = `\nLocation: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
-      }
-
+      const contacts: EmergencyContact[] = JSON.parse(contactsData);
       let successCount = 0;
+      const senderName = userName || 'Someone';
+      const locationText = location
+        ? `\nLocation: ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`
+        : '';
 
-      // Send local notifications to simulate emergency contact notifications
-      // In a real app, you would send these to the actual contacts' devices via a backend service
       for (const contact of contacts) {
         try {
           const notificationData: NotificationData = {
@@ -209,7 +296,7 @@ class NotificationService {
               priority: Notifications.AndroidNotificationPriority.MAX,
               categoryIdentifier: 'emergency_alert',
               ...(Platform.OS === 'ios' && {
-                interruptionLevel: 'critical', // iOS critical alerts
+                interruptionLevel: 'critical',
                 criticalAlert: {
                   name: 'emergency',
                   volume: 1.0,
@@ -217,20 +304,17 @@ class NotificationService {
               }),
             },
             trigger: {
-              seconds: 1 + (successCount * 2), // Stagger notifications slightly
+              seconds: 1 + successCount * 2,
             },
           });
 
           successCount++;
-          console.log(`Emergency notification scheduled for ${contact.name}`);
         } catch (error) {
           console.error(`Failed to send notification for ${contact.name}:`, error);
         }
       }
 
-      // Send a summary notification to the user
       await this.sendUserConfirmationNotification(alertType, successCount, contacts.length);
-
       return successCount;
     } catch (error) {
       console.error('Error sending emergency notifications:', error);
@@ -268,7 +352,7 @@ class NotificationService {
   public async sendCriticalAlert(
     title: string,
     body: string,
-    data?: any
+    data?: Record<string, unknown>
   ): Promise<void> {
     try {
       if (!this.notificationPermission) {
@@ -294,7 +378,7 @@ class NotificationService {
             },
           }),
         },
-        trigger: null, // Send immediately
+        trigger: null,
       });
     } catch (error) {
       console.error('Error sending critical alert:', error);
@@ -321,31 +405,14 @@ class NotificationService {
     return this.expoPushToken;
   }
 
-  // Handle notification responses (when user taps notification actions)
   public setupNotificationResponseHandler(): void {
-    Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as NotificationData;
-      
-      if (data?.type === 'emergency_alert') {
-        const actionIdentifier = response.actionIdentifier;
-        
-        switch (actionIdentifier) {
-          case 'respond':
-            // Handle respond action - could open chat or call
-            console.log('User chose to respond to emergency alert');
-            break;
-          case 'call_emergency':
-            // Handle emergency call action
-            console.log('User chose to call emergency services');
-            break;
-          default:
-            // Default tap - open app
-            console.log('User tapped emergency notification');
-            break;
-        }
-      }
+    setupPushDeepLinkHandlers({
+      getActiveOrgId: async () => AsyncStorage.getItem('platformActiveOrgId'),
+      onNavigate: payload => {
+        console.log('Push deep link', payload);
+      },
     });
   }
 }
 
-export default NotificationService; 
+export default NotificationService;

@@ -137,7 +137,14 @@ export async function listTenantIncidents(
 
 export async function registerTenantPushToken(
   context: RequestContext,
-  input: { deviceId: string; token: string; environment?: string }
+  input: {
+    deviceId: string;
+    token: string;
+    environment?: string;
+    platform?: string;
+    clientType?: string;
+    appId?: string;
+  }
 ) {
   if (!input.deviceId || !input.token) {
     throw new HttpsError('invalid-argument', 'deviceId and token required');
@@ -152,11 +159,19 @@ export async function registerTenantPushToken(
   const devicePayload = {
     token: String(input.token),
     userId: context.userId,
+    personId: context.userId,
     organizationId: context.organizationId,
     authProvider: context.authProvider,
     installationId: String(input.deviceId),
+    deviceId: String(input.deviceId),
     environment,
+    platform: input.platform ? String(input.platform) : null,
+    clientType: input.clientType ? String(input.clientType) : 'mobile',
+    appId: input.appId ? String(input.appId) : null,
+    status: 'active' as const,
+    revokedAt: null,
     updatedAt: now,
+    createdAt: now,
   };
 
   await db.doc(`fcmTokens/${actorUid(context)}/devices/${String(input.deviceId)}`).set(devicePayload, {
@@ -165,13 +180,32 @@ export async function registerTenantPushToken(
 
   await db
     .doc(`orgDevices/${context.organizationId}/tokens/${actorUid(context)}_${String(input.deviceId)}`)
-    .set(
-      {
-        ...devicePayload,
-        deviceId: String(input.deviceId),
-      },
-      { merge: true }
-    );
+    .set(devicePayload, { merge: true });
 
   return { ok: true as const, organizationId: context.organizationId, environment };
+}
+
+export async function revokeTenantPushToken(
+  context: RequestContext,
+  input: { deviceId: string }
+) {
+  if (!input.deviceId) {
+    throw new HttpsError('invalid-argument', 'deviceId required');
+  }
+  const now = Date.now();
+  const deviceId = String(input.deviceId);
+  const uid = actorUid(context);
+  const patch = {
+    status: 'revoked' as const,
+    revokedAt: now,
+    updatedAt: now,
+    token: null,
+  };
+
+  await db.doc(`fcmTokens/${uid}/devices/${deviceId}`).set(patch, { merge: true });
+  await db
+    .doc(`orgDevices/${context.organizationId}/tokens/${uid}_${deviceId}`)
+    .set(patch, { merge: true });
+
+  return { ok: true as const, organizationId: context.organizationId, deviceId };
 }

@@ -3,16 +3,20 @@ import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, Vibration } from 'react-native';
 
-// Configure notifications for critical alerts
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Configure notifications for critical alerts (local only — remote push needs a dev client)
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+} catch (err) {
+  console.warn('EmergencyService notification handler setup skipped', err);
+}
 
 interface PoliceUnit {
   id: string;

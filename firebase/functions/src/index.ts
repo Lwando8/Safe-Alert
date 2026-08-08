@@ -17,12 +17,16 @@ import {
   listTenantIncidents,
   loadIncidentInTenant,
   registerTenantPushToken,
+  revokeTenantPushToken,
 } from './incidents/tenantIncidentService';
 import {
   assignOperationalRequest,
   createOperationalRequest,
+  getWorkOrder,
+  listMyWorkOrders,
   listOperationalRequests,
   updateOperationalRequestStatus,
+  updateWorkOrderStatus,
 } from './requests/tenantRequestService';
 import {
   addAlertSighting,
@@ -565,12 +569,148 @@ export const assignUnitToIncident = onCall(async req => {
 
 export const registerPushToken = onCall(async req => {
   const context = await resolveRequestContextFromCallable(req);
-  const { deviceId, token, environment } = req.data || {};
+  const { deviceId, token, environment, platform, clientType, appId } = req.data || {};
   return registerTenantPushToken(context, {
     deviceId,
     token,
     environment: typeof environment === 'string' ? environment : undefined,
+    platform: typeof platform === 'string' ? platform : undefined,
+    clientType: typeof clientType === 'string' ? clientType : undefined,
+    appId: typeof appId === 'string' ? appId : undefined,
   });
+});
+
+export const revokePushTokenCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  const { deviceId } = req.data || {};
+  return revokeTenantPushToken(context, { deviceId });
+});
+
+/**
+ * Resolve person/org/membership/capabilities for mobile platform session.
+ * Tenant is server-derived — client organizationIdHint only selects among caller's memberships.
+ */
+export const resolvePlatformSessionCallable = onCall(async req => {
+  const hint =
+    typeof req.data?.organizationIdHint === 'string' ? req.data.organizationIdHint : undefined;
+
+  let context;
+  try {
+    context = await resolveRequestContextFromCallable(req, {
+      organizationIdHint: hint,
+    });
+  } catch (err) {
+    // Surface pending / revoked / no membership as structured session states for mobile.
+    let clerkUserId: string | null =
+      typeof req.data?.clerkUserId === 'string' ? req.data.clerkUserId : null;
+
+    if (!clerkUserId && typeof req.auth?.uid === 'string') {
+      const uid = String(req.auth.uid);
+      clerkUserId = uid.startsWith('clerk_') ? uid.slice('clerk_'.length) : uid;
+    }
+
+    if (!clerkUserId) {
+      const token =
+        typeof req.data?.clerkToken === 'string'
+          ? req.data.clerkToken
+          : typeof req.data?.sessionToken === 'string'
+            ? req.data.sessionToken
+            : null;
+      if (token) {
+        try {
+          const { Clerk } = await import('@clerk/clerk-sdk-node');
+          const clerkSdk = Clerk({ secretKey: process.env.CLERK_SECRET_KEY }) as {
+            verifyToken: (t: string, o?: object) => Promise<{ sub?: string }>;
+          };
+          const session = await clerkSdk.verifyToken(token, {
+            authorizedParties: process.env.CLERK_PUBLISHABLE_KEY
+              ? [process.env.CLERK_PUBLISHABLE_KEY]
+              : undefined,
+          });
+          clerkUserId = session.sub || null;
+        } catch {
+          // ignore — fall through to rethrow
+        }
+      }
+    }
+
+    if (clerkUserId) {
+      const { classifyMembershipAccess } = await import('./middleware/membershipLoader');
+      const access = await classifyMembershipAccess(clerkUserId);
+      return {
+        status: access.state,
+        personId: clerkUserId,
+        organizationId: access.organizationId || null,
+        membershipId: access.membershipId || null,
+        membershipStatus: access.status || null,
+        role: null,
+        permissions: [],
+        modules: [],
+        capabilities: [],
+        unitId: null,
+        canUseUserExperience: false,
+        canUseResponderExperience: false,
+        authProvider: 'clerk',
+        environment: process.env.FUNCTIONS_EMULATOR ? 'emulator' : 'production',
+      };
+    }
+    throw err;
+  }
+
+  let modules: string[] = [];
+  try {
+    const { loadOrgTenantConfig } = await import('./services/moduleGate');
+    const { resolveEffectiveModules } = await import('./services/tenantConfig');
+    const cfg = await loadOrgTenantConfig(context.organizationId);
+    const effective = resolveEffectiveModules(cfg.tenantProfile, cfg.modules);
+    modules = Object.entries(effective)
+      .filter(([, enabled]) => !!enabled)
+      .map(([key]) => key);
+  } catch {
+    modules = [];
+  }
+
+  const { loadActiveMembershipForUser } = await import('./middleware/membershipLoader');
+  let capabilities: string[] = [];
+  try {
+    const mem = await loadActiveMembershipForUser({
+      userId: context.userId,
+      organizationId: context.organizationId,
+    });
+    const rawCaps = mem.data.responderProfile?.capabilities;
+    capabilities = Array.isArray(rawCaps) ? rawCaps.map(String) : [];
+  } catch {
+    capabilities = [];
+  }
+
+  const { canUseResponderExperience, canUseUserExperience } = await import(
+    './services/experienceRouting'
+  );
+  const routingInput = {
+    membershipStatus: 'active' as const,
+    role: context.role,
+    permissions: context.permissions,
+    capabilities,
+    unitId: context.unitId || null,
+  };
+
+  return {
+    status: 'ready',
+    personId: context.userId,
+    organizationId: context.organizationId,
+    membershipId: context.membershipId,
+    membershipStatus: 'active',
+    role: context.role,
+    permissions: context.permissions,
+    modules,
+    capabilities,
+    unitId: context.unitId || null,
+    canUseUserExperience: canUseUserExperience(routingInput),
+    canUseResponderExperience: canUseResponderExperience(routingInput),
+    siteId: context.siteId,
+    authProvider: context.authProvider,
+    environment: process.env.FUNCTIONS_EMULATOR ? 'emulator' : 'production',
+  };
 });
 
 export const onIncidentCreatedNotify = onDocumentCreated('incidents/{incidentId}', async event => {
@@ -590,19 +730,19 @@ export const onIncidentCreatedNotify = onDocumentCreated('incidents/{incidentId}
     .get();
 
   const tokens = tokenSnap.docs
-    .map(docSnap => docSnap.data().token)
-    .filter(Boolean) as string[];
+    .map(docSnap => docSnap.data() as { token?: string; status?: string })
+    .filter(row => row.token && row.status !== 'revoked')
+    .map(row => String(row.token));
   if (!tokens.length) return;
 
-  await admin.messaging().sendEachForMulticast({
-    tokens,
-    notification: {
-      title: `New ${incident.type.toUpperCase()} alert`,
-      body: `Incident ${incident.id} created`,
-    },
+  const { sendOrgPushTokens } = await import('./notifications/sendOrgPush');
+  await sendOrgPushTokens(tokens, {
+    organizationId: String(incident.organizationId),
+    title: `New ${incident.type.toUpperCase()} alert`,
+    body: `Incident ${incident.id} created`,
     data: {
-      incidentId: incident.id,
-      organizationId: incident.organizationId,
+      incidentId: String(incident.id),
+      organizationId: String(incident.organizationId),
       event: 'incident_created',
     },
   });
@@ -901,6 +1041,38 @@ export const assignOperationalRequestCallable = onCall(async req => {
     slaTargetAt: typeof slaTargetAt === 'number' ? slaTargetAt : null,
     slaHours: typeof slaHours === 'number' ? slaHours : null,
     notes,
+  });
+});
+
+export const listMyWorkOrdersCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  const { status, scope, limit } = req.data || {};
+  return listMyWorkOrders(context, {
+    status: typeof status === 'string' ? status : undefined,
+    scope:
+      scope === 'assigned_to_me' ||
+      scope === 'my_team' ||
+      scope === 'available' ||
+      scope === 'all_visible'
+        ? scope
+        : undefined,
+    limit: typeof limit === 'number' ? limit : undefined,
+  });
+});
+
+export const getWorkOrderCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  return getWorkOrder(context, String(req.data?.workOrderId || ''));
+});
+
+export const updateWorkOrderStatusCallable = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  const { workOrderId, status, note, resolutionSummary } = req.data || {};
+  return updateWorkOrderStatus(context, {
+    workOrderId,
+    status,
+    note,
+    resolutionSummary,
   });
 });
 
