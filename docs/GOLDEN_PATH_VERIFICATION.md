@@ -220,7 +220,7 @@ Dev Client / Expo SDK 54. Canonical Clerk: **Seren SOS (`real-guppy-12`)**.
 7. Logout → token `status=revoked`.  
 8. Express SOS on device: Home SOS (legacy path).  
 9. Confirm ops Firestore incidents **do not** receive Express SOS ids (split-brain still expected).  
-10. After every emulator restart: lab scripts re-seed phase2b; pass `--seed-clerk-user` for device membership.
+10. After every emulator restart: lab scripts re-seed phase2b; attach the Clerk user via **Platform → Organizations → Members** (student) or `--seed-clerk-user` (esp. responders).
 
 ### Native blockers
 

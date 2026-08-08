@@ -34,6 +34,15 @@ Templates: `.env.local.lan`, `.env.local.usb`. Do **not** mix USB `.env.local` (
 
 After every emulator restart, data is wiped — the lab scripts re-run `seed:phase2b`; pass `--seed-clerk-user` for the real Clerk `user_…` membership.
 
+### Platform member attach (preferred over hand-seed for students)
+
+Platform admin → **Organizations → [org] → Members**: attach an existing Clerk user (`user_…` or email).  
+
+- **Live org** (`clerkOrganizationId` is a real Clerk org): creates/updates Clerk org membership, then writes Firestore. Use **Sync from Clerk** to pull the full Clerk membership list into Firestore after drift or missed webhooks.  
+- **Lab / emulator org** (synthetic `org_clerk_*` or missing Clerk id): Firestore-only membership while `FIRESTORE_EMULATOR_HOST` is set — replaces `scripts/seed-device-clerk-membership.js` for the **student** golden path.  
+
+Responder unit / lab WO seeding still uses `--seed-clerk-user` with `SEED_ROLE=responder`. Actor needs `public_metadata.platformAdmin=true`. Web must use Seren SOS keys and point Admin SDK at the emulator for lab.
+
 ---
 
 ## Current runtime
