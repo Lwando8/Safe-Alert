@@ -73,5 +73,8 @@
     "babel-preset-expo": "~54.0.0",
     "firebase-tools": "^14.5.0",
     "typescript": "~5.9.2"
+  },
+  "optionalDependencies": {
+    "utf-8-validate": "^5.0.10"
   }
 }
