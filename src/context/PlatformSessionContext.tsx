@@ -89,6 +89,7 @@ export function PlatformSessionProvider({
       hasPerson: !!snapshot.personId,
       hasOrg: !!snapshot.orgId,
       role: snapshot.role,
+      unitId: snapshot.unitId,
       canUser: snapshot.canUseUserExperience,
       canResponder: snapshot.canUseResponderExperience,
       error: snapshot.error ? String(snapshot.error).slice(0, 160) : null,

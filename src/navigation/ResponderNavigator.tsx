@@ -55,6 +55,23 @@ export default function ResponderNavigator() {
           Responder session could not be loaded. Sign in again.
         </Text>
         <TouchableOpacity
+          onPress={() => {
+            setLoading(true);
+            void refresh();
+          }}
+          style={{
+            backgroundColor: '#1e293b',
+            paddingHorizontal: 20,
+            paddingVertical: 12,
+            borderRadius: 10,
+            marginBottom: 12,
+            borderWidth: 1,
+            borderColor: '#334155',
+          }}
+        >
+          <Text style={{ color: '#93c5fd', fontWeight: '700' }}>Retry</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           onPress={() => signOut()}
           style={{
             backgroundColor: '#2563eb',

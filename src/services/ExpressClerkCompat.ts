@@ -6,6 +6,9 @@
  * For experience=responder, also persists the legacy ResponderProfile that
  * ResponderNavigator requires — only when PlatformSession authorises responder
  * and an authoritative unit code is available (no synthetic CLERK-* defaults).
+ *
+ * Express outages must not clear an already-valid unit-backed profile or block
+ * the responder shell / Firestore work orders. Logout owns profile clears.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -30,12 +33,47 @@ export type EstablishExpressSosCompatResult =
       experience: 'user' | 'responder';
       profilePersisted: boolean;
       unitCode: string | null;
+      expressOk?: boolean;
     }
   | {
       ok: false;
       reason: string;
       profilePersisted: false;
     };
+
+async function persistUnitBackedResponderProfile(input: {
+  personId: string;
+  organizationId?: string | null;
+  sessionUnitId?: string | null;
+  canUseResponderExperience: boolean;
+  compatUnit?: CompatUnitPayload | null;
+}): Promise<{ ok: true; unitCode: string } | { ok: false; reason: string }> {
+  if (!input.canUseResponderExperience) {
+    return { ok: false, reason: 'not_authorised_responder' };
+  }
+  const unitCode = resolveAuthoritativeUnitCode({
+    sessionUnitId: input.sessionUnitId,
+    compatUnit: input.compatUnit,
+  });
+  if (
+    !shouldPersistClerkResponderProfile({
+      experience: 'responder',
+      canUseResponderExperience: true,
+      unitCode,
+    }) ||
+    !unitCode
+  ) {
+    return { ok: false, reason: 'missing_unit_context' };
+  }
+  const profile = buildClerkCompatResponderProfile({
+    personId: input.personId,
+    unitCode,
+    organizationId: input.organizationId || input.compatUnit?.organizationId,
+    compatUnit: input.compatUnit,
+  });
+  await saveResponderProfile(profile);
+  return { ok: true, unitCode: profile.unitCode };
+}
 
 export async function establishExpressSosCompat(input: {
   personId: string;
@@ -50,18 +88,15 @@ export async function establishExpressSosCompat(input: {
     process.env.EXPO_PUBLIC_EXPRESS_CLERK_COMPAT_SECRET ||
     process.env.EXPO_PUBLIC_MOBILE_BRIDGE_MINT_SECRET ||
     '';
-  if (!compatSecret) {
-    console.warn('Express Clerk compat secret not configured — SOS may require legacy Express login');
-    return { ok: false, reason: 'compat_secret_missing', profilePersisted: false };
-  }
 
   const experience: 'user' | 'responder' =
     input.experience === 'responder' ? 'responder' : 'user';
+  const canResponder = Boolean(input.canUseResponderExperience);
 
   // Fail closed before network: responder shell needs authoritative unit context.
   // Do not clear an existing profile on transient missing unit — logout owns clears.
   if (experience === 'responder') {
-    if (!input.canUseResponderExperience) {
+    if (!canResponder) {
       await clearResponderProfile();
       return { ok: false, reason: 'not_authorised_responder', profilePersisted: false };
     }
@@ -75,6 +110,36 @@ export async function establishExpressSosCompat(input: {
       );
       return { ok: false, reason: 'missing_unit_context', profilePersisted: false };
     }
+  }
+
+  const persistResponder = async (compatUnit?: CompatUnitPayload | null) =>
+    persistUnitBackedResponderProfile({
+      personId: input.personId,
+      organizationId: input.organizationId,
+      sessionUnitId: input.unitCode,
+      canUseResponderExperience: canResponder,
+      compatUnit,
+    });
+
+  // Without Express secret, still persist unit-backed profile so WO shell works.
+  if (!compatSecret) {
+    console.warn('Express Clerk compat secret not configured — SOS may require legacy Express login');
+    if (experience === 'user') {
+      if (!canResponder) await clearResponderProfile();
+      return { ok: true, experience: 'user', profilePersisted: false, unitCode: null, expressOk: false };
+    }
+    const persisted = await persistResponder(null);
+    if (!persisted.ok) {
+      return { ok: false, reason: persisted.reason, profilePersisted: false };
+    }
+    console.log('[ExpressClerkCompat] profile-only (no compat secret)', persisted.unitCode);
+    return {
+      ok: true,
+      experience: 'responder',
+      profilePersisted: true,
+      unitCode: persisted.unitCode,
+      expressOk: false,
+    };
   }
 
   const url = `${getApiBaseUrl()}/auth/clerk-compat`;
@@ -94,8 +159,23 @@ export async function establishExpressSosCompat(input: {
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       console.warn('Express clerk-compat failed', url, res.status, text);
-      if (experience === 'responder') await clearResponderProfile();
-      return { ok: false, reason: `compat_http_${res.status}`, profilePersisted: false };
+      if (experience === 'user') {
+        if (!canResponder) await clearResponderProfile();
+        return { ok: true, experience: 'user', profilePersisted: false, unitCode: null, expressOk: false };
+      }
+      // Keep / create profile from PlatformSession unit — do not clear on Express HTTP errors.
+      const persisted = await persistResponder(null);
+      if (!persisted.ok) {
+        return { ok: false, reason: persisted.reason, profilePersisted: false };
+      }
+      console.log('[ExpressClerkCompat] profile fallback after HTTP', res.status, persisted.unitCode);
+      return {
+        ok: true,
+        experience: 'responder',
+        profilePersisted: true,
+        unitCode: persisted.unitCode,
+        expressOk: false,
+      };
     }
     const body = (await res.json()) as {
       token?: string;
@@ -109,8 +189,20 @@ export async function establishExpressSosCompat(input: {
     };
     if (!body.token) {
       console.warn('Express clerk-compat: no token', url);
-      if (experience === 'responder') await clearResponderProfile();
-      return { ok: false, reason: 'compat_no_token', profilePersisted: false };
+      if (experience === 'responder') {
+        const persisted = await persistResponder(body.unit || null);
+        if (!persisted.ok) {
+          return { ok: false, reason: persisted.reason, profilePersisted: false };
+        }
+        return {
+          ok: true,
+          experience: 'responder',
+          profilePersisted: true,
+          unitCode: persisted.unitCode,
+          expressOk: false,
+        };
+      }
+      return { ok: true, experience: 'user', profilePersisted: false, unitCode: null, expressOk: false };
     }
 
     await AsyncStorage.setItem(AUTH_TOKEN_KEY, body.token);
@@ -130,49 +222,48 @@ export async function establishExpressSosCompat(input: {
     // responders must not lose profile when a stale lastExperience briefly
     // selects the citizen path.
     if (experience === 'user') {
-      if (!input.canUseResponderExperience) {
+      if (!canResponder) {
         await clearResponderProfile();
       }
       console.log('[ExpressClerkCompat] ready', url);
-      return { ok: true, experience: 'user', profilePersisted: false, unitCode: null };
+      return { ok: true, experience: 'user', profilePersisted: false, unitCode: null, expressOk: true };
     }
 
-    const unitCode = resolveAuthoritativeUnitCode({
-      sessionUnitId: input.unitCode,
-      compatUnit: body.unit,
-    });
-
-    const persist = shouldPersistClerkResponderProfile({
-      experience: 'responder',
-      canUseResponderExperience: Boolean(input.canUseResponderExperience),
-      unitCode,
-    });
-
-    if (!persist || !unitCode) {
+    const persisted = await persistResponder(body.unit || null);
+    if (!persisted.ok) {
       console.warn(
-        '[ExpressClerkCompat] responder compat ok but profile not persisted — missing authoritative unit'
+        '[ExpressClerkCompat] responder compat ok but profile not persisted —',
+        persisted.reason
       );
-      return { ok: false, reason: 'missing_unit_context', profilePersisted: false };
+      return { ok: false, reason: persisted.reason, profilePersisted: false };
     }
-
-    const profile = buildClerkCompatResponderProfile({
-      personId: input.personId,
-      unitCode,
-      organizationId: input.organizationId || body.unit?.organizationId || body.user?.organizationId,
-      compatUnit: body.unit,
-    });
-    await saveResponderProfile(profile);
-    console.log('[ExpressClerkCompat] ready', url, 'profile', profile.unitCode);
+    console.log('[ExpressClerkCompat] ready', url, 'profile', persisted.unitCode);
     return {
       ok: true,
       experience: 'responder',
       profilePersisted: true,
-      unitCode: profile.unitCode,
+      unitCode: persisted.unitCode,
+      expressOk: true,
     };
   } catch (err) {
     console.warn('Express clerk-compat error', url, err);
-    if (experience === 'responder') await clearResponderProfile();
-    return { ok: false, reason: 'compat_network', profilePersisted: false };
+    // Network blips must not wipe a good profile or block the responder shell.
+    if (experience === 'user') {
+      if (!canResponder) await clearResponderProfile();
+      return { ok: true, experience: 'user', profilePersisted: false, unitCode: null, expressOk: false };
+    }
+    const persisted = await persistResponder(null);
+    if (!persisted.ok) {
+      return { ok: false, reason: persisted.reason, profilePersisted: false };
+    }
+    console.log('[ExpressClerkCompat] profile fallback after network error', persisted.unitCode);
+    return {
+      ok: true,
+      experience: 'responder',
+      profilePersisted: true,
+      unitCode: persisted.unitCode,
+      expressOk: false,
+    };
   }
 }
 

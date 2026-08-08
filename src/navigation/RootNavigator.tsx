@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -51,11 +51,15 @@ function AuthenticatedShell({
   const [experience, setExperience] = useState<MobileExperience | null>(null);
   const [routing, setRouting] = useState(true);
 
+  const routeGeneration = useRef(0);
+
   useEffect(() => {
+    const gen = ++routeGeneration.current;
     let cancelled = false;
+
     async function route() {
       if (session.status === 'pending' || session.status === 'idle') {
-        setRouting(true);
+        if (gen === routeGeneration.current) setRouting(true);
         return;
       }
 
@@ -66,17 +70,21 @@ function AuthenticatedShell({
         session.status === 'pending_access' ||
         session.status === 'revoked'
       ) {
+        if (cancelled || gen !== routeGeneration.current) return;
         setExperience('none');
         setRouting(false);
         return;
       }
 
       if (session.status !== 'ready') {
+        if (cancelled || gen !== routeGeneration.current) return;
         setRouting(false);
         return;
       }
 
       const last = await getPersistedLastExperience();
+      if (cancelled || gen !== routeGeneration.current) return;
+
       const next = resolveMobileExperience({
         membershipStatus: session.membershipStatus || 'active',
         role: session.role,
@@ -88,20 +96,21 @@ function AuthenticatedShell({
         lastExperience: last,
       });
 
-      if (cancelled) return;
-
       // Legacy Express role wins only when Clerk mode is off
       if (resolveMobileAuthMode() !== 'clerk' && legacyRole === 'admin') {
+        if (cancelled || gen !== routeGeneration.current) return;
         setExperience('none');
         setRouting(false);
         return;
       }
       if (resolveMobileAuthMode() !== 'clerk' && legacyRole === 'responder') {
+        if (cancelled || gen !== routeGeneration.current) return;
         setExperience('responder');
         setRouting(false);
         return;
       }
       if (resolveMobileAuthMode() !== 'clerk' && legacyRole === 'client') {
+        if (cancelled || gen !== routeGeneration.current) return;
         setExperience('user');
         setRouting(false);
         return;
@@ -109,7 +118,9 @@ function AuthenticatedShell({
 
       if (next === 'user' || next === 'responder') {
         await setPersistedLastExperience(next);
+        if (cancelled || gen !== routeGeneration.current) return;
         const email = await AsyncStorage.getItem('clerkSessionEmail');
+        if (cancelled || gen !== routeGeneration.current) return;
         const compat = await establishExpressSosCompat({
           personId: session.personId || 'unknown',
           email,
@@ -118,6 +129,7 @@ function AuthenticatedShell({
           organizationId: session.orgId,
           canUseResponderExperience: Boolean(session.canUseResponderExperience),
         });
+        if (cancelled || gen !== routeGeneration.current) return;
 
         // Responder shell requires persisted legacy ResponderProfile (unit-backed).
         // Fail closed to access screen — do not invent synthetic units.
@@ -126,22 +138,20 @@ function AuthenticatedShell({
             '[AuthenticatedShell] responder profile bridge failed',
             !compat.ok ? compat.reason : 'profile_not_persisted'
           );
-          if (!cancelled) {
-            setExperience('none');
-            setRouting(false);
-          }
+          setExperience('none');
+          setRouting(false);
           return;
         }
       }
 
-      if (!cancelled) {
-        setExperience(next);
-        setRouting(false);
-      }
+      if (cancelled || gen !== routeGeneration.current) return;
+      setExperience(next);
+      setRouting(false);
     }
     void route();
     return () => {
       cancelled = true;
+      routeGeneration.current += 1;
     };
   }, [
     session.status,
