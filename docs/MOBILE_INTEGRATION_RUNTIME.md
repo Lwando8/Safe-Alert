@@ -40,9 +40,10 @@ Platform admin → **Organizations → [org] → Members**:
 
 - **Attach** — existing Clerk `user_…` or email → Firestore membership (and Clerk org membership when live).  
 - **Invite** — new email: live org sends Clerk organization invitation; lab/emulator creates Clerk user + Firestore membership (temporary password shown once). Existing emails fall through to Attach.  
+- **Provision responder** — existing Clerk user → `responderUnits` + membership with unit/capabilities (`security` | `facilities` | `hybrid`). Live orgs also create/update Clerk org membership (`org:responder` / `org:facilities`). Facilities/hybrid seed a lab work order when `FIRESTORE_EMULATOR_HOST` is set. Preferred over `--seed-clerk-user` with `SEED_ROLE=responder`.  
 - **Sync from Clerk** — live orgs only; pulls full Clerk membership list into Firestore after drift/missed webhooks.  
 
-Responder unit / lab WO seeding still uses `--seed-clerk-user` with `SEED_ROLE=responder`. Actor needs `public_metadata.platformAdmin=true`. Web must use Seren SOS keys and point Admin SDK at the emulator for lab.
+Actor needs `public_metadata.platformAdmin=true`. Web must use Seren SOS keys and point Admin SDK at the emulator for lab.
 
 ---
 

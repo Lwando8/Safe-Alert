@@ -116,6 +116,29 @@ export function derivePermissions(clerkRole: string): string[] {
       'requests:read-own',
       ...COMMUNITY_PERMS_MEMBER,
     ],
+    'org:responder': [
+      'incidents:read-all',
+      'incidents:acknowledge',
+      'incidents:update',
+      'responders:read',
+      'sites:read',
+      'requests:read-all',
+      'requests:update',
+      'requests:resolve',
+      'community:read',
+      'community:alerts:read',
+      'teams:read',
+    ],
+    'org:facilities': [
+      'sites:read',
+      'requests:create',
+      'requests:read-own',
+      'requests:read-all',
+      'requests:assign',
+      'requests:update',
+      'requests:resolve',
+      'teams:read',
+    ],
   };
 
   return (

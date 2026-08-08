@@ -40,6 +40,12 @@ const ATTACH_ROLES = [
   { value: 'org:member', label: 'Member (org:member → student)' },
 ] as const;
 
+const RESPONDER_TRACKS = [
+  { value: 'security', label: 'Security (SOS / incidents)' },
+  { value: 'facilities', label: 'Facilities (work orders)' },
+  { value: 'hybrid', label: 'Hybrid (lab dual-cap)' },
+] as const;
+
 type OrgPayload = {
   id: string;
   name: string;
@@ -98,6 +104,10 @@ export function OrganizationSettingsClient({ orgId, initial }: Props) {
   const [attachMsg, setAttachMsg] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [inviting, setInviting] = useState(false);
+  const [responderUserRef, setResponderUserRef] = useState('');
+  const [responderTrack, setResponderTrack] = useState<string>('security');
+  const [unitCode, setUnitCode] = useState('ALPHA-12');
+  const [provisioning, setProvisioning] = useState(false);
 
   const loadMembers = useCallback(async () => {
     setMembersLoading(true);
@@ -243,6 +253,45 @@ export function OrganizationSettingsClient({ orgId, initial }: Props) {
     }
   }
 
+  async function provisionResponder() {
+    setProvisioning(true);
+    setAttachMsg(null);
+    setMembersError(null);
+    try {
+      const res = await fetch(`/api/platform/organizations/${orgId}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'provision_responder',
+          userRef: responderUserRef,
+          track: responderTrack,
+          unitCode: unitCode.trim() || 'ALPHA-12',
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        setMembersError(json.message || 'Responder provision failed');
+        return;
+      }
+      const parts = [
+        `Provisioned responder ${json.userId}`,
+        json.track,
+        `unit ${json.unitCode}`,
+        json.mode,
+        json.labWorkOrder?.workOrderId
+          ? `lab WO ${json.labWorkOrder.workOrderId}`
+          : null,
+      ].filter(Boolean);
+      setAttachMsg(parts.join(' — '));
+      setResponderUserRef('');
+      await loadMembers();
+    } catch (err) {
+      setMembersError(err instanceof Error ? err.message : 'Responder provision failed');
+    } finally {
+      setProvisioning(false);
+    }
+  }
+
   if (!org) {
     return (
       <Card>
@@ -284,10 +333,11 @@ export function OrganizationSettingsClient({ orgId, initial }: Props) {
         <CardHeader>
           <CardTitle>Members</CardTitle>
           <CardDescription>
-            Attach an existing Clerk user, invite a new email, or sync Clerk→Firestore.
-            Memberships are server-authoritative for mobile PlatformSession.
+            Attach an existing Clerk user, invite a new email, provision a responder
+            unit, or sync Clerk→Firestore. Memberships are server-authoritative for
+            mobile PlatformSession.
             {labMode
-              ? ' Lab mode: Invite creates a Clerk user + Firestore membership (shows a temporary password). Attach also writes Firestore only.'
+              ? ' Lab mode: Invite creates a Clerk user + Firestore membership (shows a temporary password). Attach / provision also write Firestore only.'
               : ' Live mode: Invite sends a Clerk organization invitation; after accept, Sync from Clerk (or webhook) materializes Firestore.'}
           </CardDescription>
         </CardHeader>
@@ -311,17 +361,72 @@ export function OrganizationSettingsClient({ orgId, initial }: Props) {
                 </option>
               ))}
             </select>
-            <Button onClick={attachMember} disabled={attaching || inviting || !userRef.trim()}>
+            <Button
+              onClick={attachMember}
+              disabled={attaching || inviting || provisioning || !userRef.trim()}
+            >
               {attaching ? 'Attaching…' : 'Attach'}
             </Button>
             <Button
               variant="outline"
               onClick={() => void inviteMember()}
-              disabled={attaching || inviting || !userRef.trim()}
+              disabled={attaching || inviting || provisioning || !userRef.trim()}
               title="Invite new email (or attach if they already exist)"
             >
               {inviting ? 'Inviting…' : 'Invite'}
             </Button>
+          </div>
+          <div className="rounded-md border border-dashed p-3">
+            <p className="mb-2 text-sm font-medium">Provision responder</p>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Writes responderUnits + membership with unit/capabilities (replaces{' '}
+              <code className="text-xs">SEED_ROLE=responder</code> seed). Facilities /
+              hybrid also seed a lab work order when the Firestore emulator is on.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto_auto]">
+              <input
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                placeholder="Email or Clerk user id (user_…)"
+                value={responderUserRef}
+                onChange={e => setResponderUserRef(e.target.value)}
+                autoComplete="off"
+              />
+              <select
+                className="rounded-md border bg-background px-3 py-2 text-sm"
+                value={responderTrack}
+                onChange={e => setResponderTrack(e.target.value)}
+              >
+                {RESPONDER_TRACKS.map(t => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="w-40 rounded-md border bg-background px-3 py-2 text-sm"
+                placeholder="Unit code"
+                value={unitCode}
+                onChange={e => setUnitCode(e.target.value)}
+                disabled={responderTrack === 'facilities'}
+                title={
+                  responderTrack === 'facilities'
+                    ? 'Facilities uses fixed unit FAC-LAB'
+                    : 'Express unit code (e.g. ALPHA-12)'
+                }
+                autoComplete="off"
+              />
+              <Button
+                onClick={() => void provisionResponder()}
+                disabled={
+                  attaching ||
+                  inviting ||
+                  provisioning ||
+                  !responderUserRef.trim()
+                }
+              >
+                {provisioning ? 'Provisioning…' : 'Provision'}
+              </Button>
+            </div>
           </div>
           {attachMsg ? <p className="text-sm text-green-600">{attachMsg}</p> : null}
           {membersError ? <p className="text-sm text-destructive">{membersError}</p> : null}

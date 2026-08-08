@@ -3,6 +3,7 @@ import {
   attachPlatformOrganizationMember,
   invitePlatformOrganizationMember,
   listPlatformOrganizationMembers,
+  provisionPlatformResponder,
   syncPlatformOrganizationMembersFromClerk,
 } from '@/lib/platform-members';
 
@@ -38,7 +39,15 @@ export async function GET(_request: Request, { params }: Params) {
 
 export async function POST(request: Request, { params }: Params) {
   const { orgId } = await params;
-  let body: { action?: string; userRef?: string; email?: string; role?: string } = {};
+  let body: {
+    action?: string;
+    userRef?: string;
+    email?: string;
+    role?: string;
+    track?: string;
+    unitCode?: string;
+    seedLabWorkOrder?: boolean;
+  } = {};
   try {
     body = await request.json();
   } catch {
@@ -61,6 +70,20 @@ export async function POST(request: Request, { params }: Params) {
       organizationId: orgId,
       email: String(body.email || body.userRef || ''),
       role: body.role,
+    });
+    if (!result.ok) {
+      return NextResponse.json(result, { status: statusFor(result.code) });
+    }
+    return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } });
+  }
+
+  if (body.action === 'provision_responder') {
+    const result = await provisionPlatformResponder({
+      organizationId: orgId,
+      userRef: String(body.userRef || body.email || ''),
+      track: body.track,
+      unitCode: body.unitCode,
+      seedLabWorkOrder: body.seedLabWorkOrder,
     });
     if (!result.ok) {
       return NextResponse.json(result, { status: statusFor(result.code) });

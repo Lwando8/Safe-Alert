@@ -8,6 +8,12 @@ import {
   mapRoleToKind,
   type AttachableClerkRole,
 } from './membership-mapping';
+import {
+  RESPONDER_PERMISSIONS,
+  isResponderTrack,
+  resolveResponderTrack,
+  type ResponderTrack,
+} from './responder-tracks';
 
 export type PlatformMemberRow = {
   id: string;
@@ -119,10 +125,14 @@ async function upsertFirestoreMembership(input: {
   clerkRole: string;
   siteId: string;
   forceActive?: boolean;
+  kind?: string;
+  permissions?: string[];
+  teamIds?: string[];
+  responderProfile?: Record<string, unknown> | null;
 }): Promise<{ membershipId: string; created: boolean }> {
   const db = getAdminDb();
-  const kind = mapRoleToKind(input.clerkRole);
-  const permissions = derivePermissions(input.clerkRole);
+  const kind = input.kind || mapRoleToKind(input.clerkRole);
+  const permissions = input.permissions || derivePermissions(input.clerkRole);
   const now = Date.now();
 
   const existingSnap = await db
@@ -131,7 +141,7 @@ async function upsertFirestoreMembership(input: {
     .limit(1)
     .get();
 
-  const base = {
+  const base: Record<string, unknown> = {
     clerkMembershipId: input.clerkMembershipId,
     clerkOrganizationId: input.clerkOrganizationId,
     organizationId: input.organizationId,
@@ -142,6 +152,10 @@ async function upsertFirestoreMembership(input: {
     permissions,
     updatedAt: now,
   };
+  if (input.teamIds) base.teamIds = input.teamIds;
+  if (input.responderProfile !== undefined) {
+    base.responderProfile = input.responderProfile;
+  }
 
   if (existingSnap.empty) {
     // Also avoid duplicate active rows for same user+org
@@ -727,6 +741,266 @@ export async function invitePlatformOrganizationMember(input: {
       ok: false,
       code: 'unavailable',
       message: err instanceof Error ? err.message : 'Unable to invite member.',
+    };
+  }
+}
+
+async function seedLabWorkOrder(input: {
+  organizationId: string;
+  siteId: string;
+  clerkUserId: string;
+  unitCode: string;
+}): Promise<{ requestId: string; workOrderId: string }> {
+  const db = getAdminDb();
+  const reqId = `lab_req_${input.clerkUserId.slice(0, 18)}`;
+  const woId = `lab_wo_${input.clerkUserId.slice(0, 18)}`;
+  const t = Date.now();
+  await db.doc(`operationalRequests/${reqId}`).set(
+    {
+      id: reqId,
+      organizationId: input.organizationId,
+      siteId: input.siteId,
+      zoneId: null,
+      reporterUserId: input.clerkUserId,
+      category: 'plumbing',
+      title: 'Lab leak — responder queue',
+      description: 'Platform-provisioned lab work order.',
+      status: 'assigned',
+      priority: 'high',
+      location: null,
+      locationLabel: 'Lab Building A',
+      attachments: [],
+      assignedTeamId: 'team_a_facilities',
+      assignedUserId: input.clerkUserId,
+      workOrderId: woId,
+      assignedAt: t,
+      createdAt: t,
+      updatedAt: t,
+      lab: true,
+    },
+    { merge: true }
+  );
+  await db.doc(`workOrders/${woId}`).set(
+    {
+      id: woId,
+      organizationId: input.organizationId,
+      siteId: input.siteId,
+      zoneId: null,
+      requestId: reqId,
+      category: 'plumbing',
+      assignedTeamId: 'team_a_facilities',
+      assignedUserId: input.clerkUserId,
+      priority: 'high',
+      status: 'assigned',
+      slaTargetAt: t + 4 * 60 * 60 * 1000,
+      notes: 'Lab WO for organisation queue',
+      attachments: [],
+      resolutionSummary: null,
+      createdAt: t,
+      updatedAt: t,
+      acceptedAt: null,
+      workStartedAt: null,
+      resolvedAt: null,
+      lab: true,
+      unitCodeHint: input.unitCode,
+    },
+    { merge: true }
+  );
+  return { requestId: reqId, workOrderId: woId };
+}
+
+/**
+ * Provision an existing Clerk user as a responder (unit + capabilities).
+ * Replaces scripts/seed-device-clerk-membership.js SEED_ROLE=responder for platform admins.
+ */
+export async function provisionPlatformResponder(input: {
+  organizationId: string;
+  userRef: string;
+  track?: string;
+  unitCode?: string;
+  seedLabWorkOrder?: boolean;
+}): Promise<
+  | {
+      ok: true;
+      membershipId: string;
+      userId: string;
+      track: ResponderTrack;
+      unitCode: string;
+      capabilities: string[];
+      mode: 'clerk+firestore' | 'firestore-lab';
+      labWorkOrder?: { requestId: string; workOrderId: string } | null;
+    }
+  | { ok: false; code: string; message: string }
+> {
+  const gate = await assertPlatformAdminSession();
+  if (!gate.ok) return gate;
+
+  const trackRaw = (input.track || 'security').trim().toLowerCase();
+  if (!isResponderTrack(trackRaw)) {
+    return {
+      ok: false,
+      code: 'invalid',
+      message: 'track must be security|facilities|hybrid',
+    };
+  }
+  const track = trackRaw;
+  const unitHint = (input.unitCode || 'ALPHA-12').trim().toUpperCase();
+  if (track !== 'facilities' && /^CLERK-/i.test(unitHint)) {
+    return {
+      ok: false,
+      code: 'invalid',
+      message: 'Refusing synthetic CLERK-* unit codes for security/hybrid tracks.',
+    };
+  }
+  const cfg = resolveResponderTrack(track, unitHint);
+
+  const resolved = await resolveClerkUserId(input.userRef);
+  if (!resolved.ok) return resolved;
+
+  try {
+    const db = getAdminDb();
+    const orgSnap = await db.doc(`organizations/${input.organizationId}`).get();
+    if (!orgSnap.exists) {
+      return { ok: false, code: 'not_found', message: 'Organization not found.' };
+    }
+    const org = orgSnap.data() as {
+      id?: string;
+      clerkOrganizationId?: string;
+    };
+    const organizationId = String(org.id || input.organizationId);
+    const clerkOrganizationId = org.clerkOrganizationId
+      ? String(org.clerkOrganizationId)
+      : '';
+    const live = isLiveClerkOrganizationId(clerkOrganizationId);
+    const emulator = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
+
+    if (!live && !emulator) {
+      return {
+        ok: false,
+        code: 'failed_precondition',
+        message:
+          'Responder provision for synthetic orgs requires FIRESTORE_EMULATOR_HOST, or set a live clerkOrganizationId.',
+      };
+    }
+
+    const siteId = await getDefaultSiteId(organizationId);
+    if (!siteId) {
+      return {
+        ok: false,
+        code: 'failed_precondition',
+        message: 'Organization has no site — configure a default site first.',
+      };
+    }
+
+    await ensurePerson(resolved.userId, resolved.email);
+
+    const now = Date.now();
+    await db.doc(`responderUnits/${cfg.firestoreUnitId}`).set(
+      {
+        id: cfg.firestoreUnitId,
+        unitCode: cfg.unitCode,
+        responderType: cfg.responderType,
+        capabilities: cfg.capabilities,
+        organizationId,
+        active: true,
+        lab: true,
+        expressLoginId: cfg.expressLoginId,
+        createdAt: now,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+
+    let clerkMembershipId = '';
+    let mode: 'clerk+firestore' | 'firestore-lab' = 'firestore-lab';
+
+    if (live) {
+      mode = 'clerk+firestore';
+      const client = await clerkClient();
+      try {
+        const created = await client.organizations.createOrganizationMembership({
+          organizationId: clerkOrganizationId,
+          userId: resolved.userId,
+          role: cfg.clerkRole,
+        });
+        clerkMembershipId = created.id;
+      } catch {
+        const list = await client.organizations.getOrganizationMembershipList({
+          organizationId: clerkOrganizationId,
+          limit: 100,
+        });
+        const existing = list.data.find(m => m.publicUserData?.userId === resolved.userId);
+        if (!existing) {
+          return {
+            ok: false,
+            code: 'unavailable',
+            message: 'Unable to create or find Clerk org membership for responder.',
+          };
+        }
+        clerkMembershipId = existing.id;
+        try {
+          await client.organizations.updateOrganizationMembership({
+            organizationId: clerkOrganizationId,
+            userId: resolved.userId,
+            role: cfg.clerkRole,
+          });
+        } catch {
+          // role update optional
+        }
+      }
+    } else {
+      clerkMembershipId = `lab_resp_${resolved.userId.slice(0, 18)}_${organizationId}`;
+    }
+
+    const upserted = await upsertFirestoreMembership({
+      organizationId,
+      clerkOrganizationId: clerkOrganizationId || `lab_${organizationId}`,
+      clerkMembershipId,
+      userId: resolved.userId,
+      clerkRole: cfg.clerkRole,
+      siteId,
+      forceActive: true,
+      kind: cfg.kind,
+      permissions: [...RESPONDER_PERMISSIONS],
+      teamIds: cfg.teamIds,
+      responderProfile: {
+        unitCode: cfg.unitCode,
+        responderType: cfg.responderType,
+        capabilities: cfg.capabilities,
+        approvalStatus: 'approved',
+        employmentStatus: 'active',
+      },
+    });
+
+    let labWorkOrder: { requestId: string; workOrderId: string } | null = null;
+    const shouldSeedWo =
+      input.seedLabWorkOrder === true ||
+      (input.seedLabWorkOrder !== false && cfg.seedLabWorkOrder && emulator);
+    if (shouldSeedWo) {
+      labWorkOrder = await seedLabWorkOrder({
+        organizationId,
+        siteId,
+        clerkUserId: resolved.userId,
+        unitCode: cfg.unitCode,
+      });
+    }
+
+    return {
+      ok: true,
+      membershipId: upserted.membershipId,
+      userId: resolved.userId,
+      track,
+      unitCode: cfg.unitCode,
+      capabilities: cfg.capabilities,
+      mode,
+      labWorkOrder,
+    };
+  } catch (err) {
+    console.error('provisionPlatformResponder failed', err);
+    return {
+      ok: false,
+      code: 'unavailable',
+      message: err instanceof Error ? err.message : 'Unable to provision responder.',
     };
   }
 }
