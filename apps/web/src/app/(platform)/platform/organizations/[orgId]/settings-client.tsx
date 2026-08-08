@@ -54,6 +54,8 @@ type OrgPayload = {
   tenantProfile?: string;
   modules?: Record<string, boolean>;
   settings?: Record<string, unknown>;
+  clerkOrganizationId?: string | null;
+  labMode?: boolean;
 };
 
 type MemberRow = {
@@ -95,7 +97,9 @@ export function OrganizationSettingsClient({ orgId, initial }: Props) {
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   const [members, setMembers] = useState<MemberRow[]>([]);
-  const [labMode, setLabMode] = useState(false);
+  const [labMode, setLabMode] = useState(
+    initial.ok ? Boolean(initial.organization.labMode) : false
+  );
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState<string | null>(null);
   const [userRef, setUserRef] = useState('');
@@ -108,6 +112,8 @@ export function OrganizationSettingsClient({ orgId, initial }: Props) {
   const [responderTrack, setResponderTrack] = useState<string>('security');
   const [unitCode, setUnitCode] = useState('ALPHA-12');
   const [provisioning, setProvisioning] = useState(false);
+  const [linkClerkId, setLinkClerkId] = useState('');
+  const [linkingClerk, setLinkingClerk] = useState(false);
 
   const loadMembers = useCallback(async () => {
     setMembersLoading(true);
@@ -292,6 +298,38 @@ export function OrganizationSettingsClient({ orgId, initial }: Props) {
     }
   }
 
+  async function linkClerkOrg() {
+    setLinkingClerk(true);
+    setSavedMsg(null);
+    setError(null);
+    try {
+      const res = await fetch(`/api/platform/organizations/${orgId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'link_clerk',
+          clerkOrganizationId: linkClerkId.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        setError(json.message || 'Link Clerk org failed');
+        return;
+      }
+      setOrg(json.organization);
+      setLabMode(Boolean(json.organization?.labMode));
+      setSavedMsg(
+        `Linked Clerk ${json.organization?.clerkOrganizationId || linkClerkId.trim()}. Sync from Clerk is now available.`
+      );
+      setLinkClerkId('');
+      await loadMembers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Link Clerk org failed');
+    } finally {
+      setLinkingClerk(false);
+    }
+  }
+
   if (!org) {
     return (
       <Card>
@@ -324,10 +362,43 @@ export function OrganizationSettingsClient({ orgId, initial }: Props) {
           <p className="text-sm text-muted-foreground">
             Profile supplies defaults; module toggles override per organization.
             Server enforces modules — client never trusts these flags alone.
+            {org.clerkOrganizationId ? (
+              <>
+                {' '}
+                Clerk: <code className="text-xs">{org.clerkOrganizationId}</code>
+                {org.labMode || labMode ? ' (lab/synthetic)' : ' (live)'}
+              </>
+            ) : null}
           </p>
         </div>
         <Badge variant="secondary">{org.status || 'active'}</Badge>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Clerk link</CardTitle>
+          <CardDescription>
+            Promote a lab org to live Sync/Invite by attaching a real Clerk{' '}
+            <code className="text-xs">org_…</code> id. Does not create the Clerk org.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <input
+            className="w-full flex-1 rounded-md border bg-background px-3 py-2 text-sm font-mono"
+            placeholder="org_…"
+            value={linkClerkId}
+            onChange={e => setLinkClerkId(e.target.value)}
+            autoComplete="off"
+          />
+          <Button
+            variant="outline"
+            onClick={() => void linkClerkOrg()}
+            disabled={linkingClerk || !linkClerkId.trim()}
+          >
+            {linkingClerk ? 'Linking…' : 'Link Clerk org'}
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

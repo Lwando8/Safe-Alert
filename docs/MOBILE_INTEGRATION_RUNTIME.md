@@ -34,6 +34,15 @@ Templates: `.env.local.lan`, `.env.local.usb`. Do **not** mix USB `.env.local` (
 
 After every emulator restart, data is wiped — the lab scripts re-run `seed:phase2b`; pass `--seed-clerk-user` for the real Clerk `user_…` membership.
 
+### Platform organization provision
+
+Platform admin → **Organizations**:
+
+- **Create organization** — name + slug + tenant profile.  
+  - **Lab** — Firestore org + `{slug}_main` site with synthetic `org_clerk_*` (requires `FIRESTORE_EMULATOR_HOST`).  
+  - **Live** — create Clerk organization (or link an existing `org_…`) then Firestore + default site.  
+- **Link Clerk org** (org detail) — attach a live `org_…` to an existing Firestore tenant so Sync/Invite use the live path.
+
 ### Platform member attach (preferred over hand-seed for students)
 
 Platform admin → **Organizations → [org] → Members**:
