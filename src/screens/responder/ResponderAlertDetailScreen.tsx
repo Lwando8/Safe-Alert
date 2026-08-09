@@ -10,6 +10,7 @@ import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
+  acceptIncident,
   fetchIncident,
   sendUnitHeartbeat,
   updateIncidentStatus,
@@ -131,9 +132,26 @@ export default function ResponderAlertDetailScreen({ route, profile }: Props) {
     }
   };
 
+  const handleAccept = async () => {
+    setUpdating(true);
+    try {
+      await acceptIncident(alertId);
+      setAlert(await fetchIncident(alertId));
+    } catch (err) {
+      console.error(err);
+      RNAlert.alert(
+        'Accept failed',
+        err instanceof Error ? err.message : 'Could not accept this call'
+      );
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const latestLocation = useMemo(() => {
     const locations = alert?.locations || [];
-    return locations[locations.length - 1];
+    if (locations.length) return locations[locations.length - 1];
+    return alert?.location || null;
   }, [alert]);
 
   if (!alert) {
@@ -144,6 +162,7 @@ export default function ResponderAlertDetailScreen({ route, profile }: Props) {
     );
   }
 
+  const canAccept = !myAssignment && (alert.assignments || []).length === 0;
   const upcoming = nextStatus();
   const statusLabel = upcoming
     ? `Mark ${upcoming.replace('_', ' ')}`
@@ -182,16 +201,28 @@ export default function ResponderAlertDetailScreen({ route, profile }: Props) {
       )}
 
       <Text style={styles.statusText}>
-        Current: {myAssignment?.status || 'pending'}
+        Current: {canAccept ? 'needs response' : myAssignment?.status || 'pending'}
       </Text>
 
-      <TouchableOpacity
-        style={[styles.button, updating && { opacity: 0.6 }]}
-        onPress={sendStatus}
-        disabled={updating || !myAssignment}
-      >
-        <Text style={styles.buttonText}>{statusLabel}</Text>
-      </TouchableOpacity>
+      {canAccept ? (
+        <TouchableOpacity
+          style={[styles.button, styles.acceptButton, updating && { opacity: 0.6 }]}
+          onPress={() => void handleAccept()}
+          disabled={updating}
+        >
+          <Text style={styles.buttonText}>
+            {updating ? 'Accepting…' : 'Accept call'}
+          </Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          style={[styles.button, updating && { opacity: 0.6 }]}
+          onPress={sendStatus}
+          disabled={updating || !myAssignment}
+        >
+          <Text style={styles.buttonText}>{statusLabel}</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -214,6 +245,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
   },
+  acceptButton: { backgroundColor: '#dc2626' },
   buttonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   text: { color: '#e2e8f0' },
 });

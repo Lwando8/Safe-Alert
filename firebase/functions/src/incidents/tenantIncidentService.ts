@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { RequestContext } from '../middleware/requestContext';
 import { authorize, requireTenantMatch } from '../middleware/requestContext';
-import { getDb, getRtdb } from '../firebaseApps';
+import { getDb, safeRtdbWrite } from '../firebaseApps';
 import { recordAnalyticsEvent } from '../analytics/recordAnalyticsEvent';
 import { assertUniversityModuleAccess } from '../services/universityEntitlements';
 import { ensurePersonForClerkUser } from '../services/personService';
@@ -86,17 +86,15 @@ export async function createTenantIncident(
     authProvider: context.authProvider,
     timestamp: now,
   });
-  try {
-    await getRtdb().ref(`incidentTracks/${incidentId}/points`).push({
+  await safeRtdbWrite('incidentTracks:create', dbRtdb =>
+    dbRtdb.ref(`incidentTracks/${incidentId}/points`).push({
       lat: input.location.latitude,
       lng: input.location.longitude,
       t: now,
       uid: actorUid(context),
       organizationId: context.organizationId,
-    });
-  } catch (err) {
-    console.error('incidentTracks RTDB write failed (non-fatal)', err);
-  }
+    })
+  );
 
   await recordAnalyticsEvent({
     organizationId: context.organizationId,

@@ -11,6 +11,7 @@ export function isResponderTrack(value: string): value is ResponderTrack {
 }
 
 export const RESPONDER_PERMISSIONS = [
+  'incidents:create',
   'incidents:read-all',
   'incidents:acknowledge',
   'incidents:update',

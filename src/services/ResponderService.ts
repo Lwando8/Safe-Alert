@@ -77,17 +77,20 @@ export async function fetchAssignments(
 ): Promise<DispatchAlert[]> {
   const listed = await listOrgIncidentsMobile({ status: 'open', limit: 100 });
   const hints = new Set(unitHintsFromProfile(profile));
-  const incidents = (listed.incidents || [])
+  return (listed.incidents || [])
     .map(incidentToDispatchAlert)
-    .filter(alert =>
-      (alert.assignments || []).some(
+    .filter(alert => {
+      const assignments = alert.assignments || [];
+      // Unassigned open SOS — available for any eligible responder to accept
+      if (assignments.length === 0) return true;
+      if (!hints.size) return false;
+      return assignments.some(
         a =>
           hints.has(String(a.responderUnitId || '')) ||
           hints.has(String(a.responderId || '')) ||
           hints.has(String(a.name || ''))
-      )
-    );
-  return incidents;
+      );
+    });
 }
 
 export async function fetchNearbyIncidents(

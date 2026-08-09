@@ -82,6 +82,7 @@ function derivePermissions(clerkRole, _kind) {
             'teams:read',
         ],
         'org:responder': [
+            'incidents:create',
             'incidents:read-all',
             'incidents:acknowledge',
             'incidents:update',

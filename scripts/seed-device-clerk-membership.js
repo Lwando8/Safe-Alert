@@ -85,6 +85,7 @@ const STUDENT_PERMISSIONS = [
 
 /** Smallest set for responder shell + listMyWorkOrders / get / update */
 const RESPONDER_PERMISSIONS = [
+  'incidents:create',
   'incidents:read-all',
   'incidents:acknowledge',
   'incidents:update',

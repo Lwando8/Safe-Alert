@@ -50,7 +50,7 @@ import {
   listAnalyticsEvents,
   updateOrganizationTenantSettings,
 } from './platform/tenantSettingsService';
-import { getAuth, getDb, getRtdb } from './firebaseApps';
+import { getAuth, getDb, safeRtdbWrite } from './firebaseApps';
 import {
   clampRadiusKm,
   filterIncidentsByRadius,
@@ -255,17 +255,15 @@ export const appendIncidentLocation = onCall(async req => {
   }
 
   await ref.set({ lastLocation: location, updatedAt: now() }, { merge: true });
-  try {
-    await getRtdb().ref(`incidentTracks/${incidentId}/points`).push({
+  await safeRtdbWrite('incidentTracks:append', dbRtdb =>
+    dbRtdb.ref(`incidentTracks/${incidentId}/points`).push({
       lat: location.latitude,
       lng: location.longitude,
       t: now(),
       uid: actorUid(context),
       organizationId: context.organizationId,
-    });
-  } catch (err) {
-    console.error('appendIncidentLocation RTDB write failed (non-fatal)', err);
-  }
+    })
+  );
   return { ok: true, viaGrant };
 });
 
@@ -987,16 +985,18 @@ export const unitHeartbeat = onCall(async req => {
   const organizationId =
     authz.mode === 'context' ? authz.context.organizationId : authz.organizationId;
 
-  await getRtdb().ref(`liveUnits/${String(unitCode)}`).set({
-    lat: location?.latitude ?? null,
-    lng: location?.longitude ?? null,
-    status,
-    lastSeenAt: now(),
-    uid: authz.mode === 'context' ? actorUid(authz.context) : authz.uid,
-    organizationId: organizationId || null,
-    membershipId: authz.mode === 'context' ? authz.context.membershipId : null,
-    authProvider: authz.mode === 'context' ? authz.context.authProvider : 'firebase',
-  });
+  await safeRtdbWrite('liveUnits:heartbeat', dbRtdb =>
+    dbRtdb.ref(`liveUnits/${String(unitCode)}`).set({
+      lat: location?.latitude ?? null,
+      lng: location?.longitude ?? null,
+      status,
+      lastSeenAt: now(),
+      uid: authz.mode === 'context' ? actorUid(authz.context) : authz.uid,
+      organizationId: organizationId || null,
+      membershipId: authz.mode === 'context' ? authz.context.membershipId : null,
+      authProvider: authz.mode === 'context' ? authz.context.authProvider : 'firebase',
+    })
+  );
   return { ok: true, organizationId };
 });
 

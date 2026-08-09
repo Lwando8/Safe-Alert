@@ -12,7 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import { usePlatformSession } from '../../context/PlatformSessionContext';
 import { resolveResponderBranchVisibility } from '../../auth/responderBranches';
 import { useResponderWebSocket } from '../../hooks/useResponderWebSocket';
-import { fetchAssignments, endShift } from '../../services/ResponderService';
+import { fetchAssignments, endShift, acceptIncident } from '../../services/ResponderService';
 import { ResponderStackParamList } from '../../types';
 import { DispatchAlert, ResponderProfile } from '../../types/dispatch';
 
@@ -73,6 +73,7 @@ export default function ResponderAssignmentsScreen({ navigation, profile, onShif
   const branches = resolveResponderBranchVisibility(platform.capabilities);
   const [alerts, setAlerts] = useState<DispatchAlert[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
   const loadAlerts = async () => {
     setRefreshing(true);
@@ -122,33 +123,63 @@ export default function ResponderAssignmentsScreen({ navigation, profile, onShif
   useResponderWebSocket(wsHandlers);
 
   const relevantAlerts = useMemo(() => {
-    return alerts.filter(alert =>
-      (alert.assignments || []).some(a => assignmentVisibleToResponder(a, profile))
-    );
+    return alerts.filter(alert => {
+      const assignments = alert.assignments || [];
+      if (assignments.length === 0) return true;
+      return assignments.some(a => assignmentVisibleToResponder(a, profile));
+    });
   }, [alerts, profile]);
+
+  const handleAccept = async (alertId: string) => {
+    setAcceptingId(alertId);
+    try {
+      await acceptIncident(alertId);
+      await loadAlerts();
+      navigation.navigate('ResponderAlertDetail', { alertId });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAcceptingId(null);
+    }
+  };
 
   const renderItem = ({ item }: { item: DispatchAlert }) => {
     const myAssignment = findMyAssignment(item, profile);
+    const canAccept = !myAssignment && (item.assignments || []).length === 0;
     return (
-      <TouchableOpacity
-        style={styles.card}
-        onPress={() =>
-          navigation.navigate('ResponderAlertDetail', { alertId: item.id })
-        }
-      >
-        <View style={styles.cardHeader}>
-          <Text style={styles.type}>{item.type.toUpperCase()}</Text>
-          <Text style={styles.status}>{myAssignment?.status || 'pending'}</Text>
-        </View>
-        <Text style={styles.meta}>
-          Created {new Date(item.createdAt).toLocaleTimeString()}
-        </Text>
-        {myAssignment?.etaMinutes != null && (
+      <View style={styles.card}>
+        <TouchableOpacity
+          onPress={() =>
+            navigation.navigate('ResponderAlertDetail', { alertId: item.id })
+          }
+        >
+          <View style={styles.cardHeader}>
+            <Text style={styles.type}>{item.type.toUpperCase()}</Text>
+            <Text style={styles.status}>
+              {canAccept ? 'needs response' : myAssignment?.status || 'pending'}
+            </Text>
+          </View>
           <Text style={styles.meta}>
-            ETA: {myAssignment.etaMinutes} min • {myAssignment.distanceKm} km
+            Created {new Date(item.createdAt).toLocaleTimeString()}
           </Text>
-        )}
-      </TouchableOpacity>
+          {myAssignment?.etaMinutes != null && (
+            <Text style={styles.meta}>
+              ETA: {myAssignment.etaMinutes} min • {myAssignment.distanceKm} km
+            </Text>
+          )}
+        </TouchableOpacity>
+        {canAccept ? (
+          <TouchableOpacity
+            style={[styles.acceptBtn, acceptingId === item.id && { opacity: 0.6 }]}
+            disabled={acceptingId === item.id}
+            onPress={() => void handleAccept(item.id)}
+          >
+            <Text style={styles.acceptBtnText}>
+              {acceptingId === item.id ? 'Accepting…' : 'Accept call'}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
     );
   };
 
@@ -192,7 +223,7 @@ export default function ResponderAssignmentsScreen({ navigation, profile, onShif
           <RefreshControl refreshing={refreshing} onRefresh={loadAlerts} />
         }
         ListEmptyComponent={
-          <Text style={styles.empty}>No assignments for your unit yet</Text>
+          <Text style={styles.empty}>No open incidents nearby for your unit</Text>
         }
         contentContainerStyle={{ paddingBottom: 24 }}
       />
@@ -224,5 +255,13 @@ const styles = StyleSheet.create({
   type: { color: '#e2e8f0', fontSize: 16, fontWeight: '700' },
   status: { color: '#38bdf8', textTransform: 'capitalize' },
   meta: { color: '#94a3b8', marginTop: 6 },
+  acceptBtn: {
+    marginTop: 12,
+    backgroundColor: '#dc2626',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  acceptBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
   empty: { color: '#94a3b8', textAlign: 'center', marginTop: 40 },
 });

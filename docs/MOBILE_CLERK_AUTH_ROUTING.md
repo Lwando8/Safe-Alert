@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-07  
 **Branch:** `mobile/integration-repair`  
-**SOS CUTOVER: IN PROGRESS** (mobile on Firestore; physical matrix pending)
+**SOS CUTOVER: YES** (2026-08-09 — mobile SOS + responder emergency on Firestore)
 
 ## Inventory (Step 1)
 

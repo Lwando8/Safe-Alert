@@ -117,6 +117,7 @@ export function derivePermissions(clerkRole: string): string[] {
       ...COMMUNITY_PERMS_MEMBER,
     ],
     'org:responder': [
+      'incidents:create',
       'incidents:read-all',
       'incidents:acknowledge',
       'incidents:update',

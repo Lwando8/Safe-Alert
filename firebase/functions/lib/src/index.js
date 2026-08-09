@@ -224,18 +224,13 @@ exports.appendIncidentLocation = (0, https_1.onCall)(async (req) => {
         });
     }
     await ref.set({ lastLocation: location, updatedAt: now() }, { merge: true });
-    try {
-        await (0, firebaseApps_1.getRtdb)().ref(`incidentTracks/${incidentId}/points`).push({
-            lat: location.latitude,
-            lng: location.longitude,
-            t: now(),
-            uid: (0, tenantIncidentService_1.actorUid)(context),
-            organizationId: context.organizationId,
-        });
-    }
-    catch (err) {
-        console.error('appendIncidentLocation RTDB write failed (non-fatal)', err);
-    }
+    await (0, firebaseApps_1.safeRtdbWrite)('incidentTracks:append', dbRtdb => dbRtdb.ref(`incidentTracks/${incidentId}/points`).push({
+        lat: location.latitude,
+        lng: location.longitude,
+        t: now(),
+        uid: (0, tenantIncidentService_1.actorUid)(context),
+        organizationId: context.organizationId,
+    }));
     return { ok: true, viaGrant };
 });
 exports.getNearbyIncidents = (0, https_1.onCall)(async (req) => {
@@ -833,7 +828,7 @@ exports.unitHeartbeat = (0, https_1.onCall)(async (req) => {
         throw new https_1.HttpsError('permission-denied', 'unitCode does not match bound responder unit');
     }
     const organizationId = authz.mode === 'context' ? authz.context.organizationId : authz.organizationId;
-    await (0, firebaseApps_1.getRtdb)().ref(`liveUnits/${String(unitCode)}`).set({
+    await (0, firebaseApps_1.safeRtdbWrite)('liveUnits:heartbeat', dbRtdb => dbRtdb.ref(`liveUnits/${String(unitCode)}`).set({
         lat: location?.latitude ?? null,
         lng: location?.longitude ?? null,
         status,
@@ -842,7 +837,7 @@ exports.unitHeartbeat = (0, https_1.onCall)(async (req) => {
         organizationId: organizationId || null,
         membershipId: authz.mode === 'context' ? authz.context.membershipId : null,
         authProvider: authz.mode === 'context' ? authz.context.authProvider : 'firebase',
-    });
+    }));
     return { ok: true, organizationId };
 });
 exports.health = (0, https_1.onCall)(async () => ({

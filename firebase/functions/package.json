@@ -19,6 +19,7 @@
     "probe:phase2d": "npm run build && FIRESTORE_EMULATOR_HOST=${FIRESTORE_EMULATOR_HOST:-127.0.0.1:8080} GCLOUD_PROJECT=${GCLOUD_PROJECT:-demo-seren} node lib/scripts/phase2d-emulator-probe.js",
     "probe:expansion": "npm run build && FIRESTORE_EMULATOR_HOST=${FIRESTORE_EMULATOR_HOST:-127.0.0.1:8080} GCLOUD_PROJECT=${GCLOUD_PROJECT:-demo-seren} node lib/scripts/phase-expansion-emulator-probe.js",
     "probe:golden-path": "npm run build && FIRESTORE_EMULATOR_HOST=${FIRESTORE_EMULATOR_HOST:-127.0.0.1:8080} GCLOUD_PROJECT=${GCLOUD_PROJECT:-demo-seren} node lib/scripts/golden-path-emulator-probe.js",
+    "probe:sos-cutover": "npm run build && FIRESTORE_EMULATOR_HOST=${FIRESTORE_EMULATOR_HOST:-127.0.0.1:8080} GCLOUD_PROJECT=${GCLOUD_PROJECT:-demo-seren} node scripts/sos-cutover-smoke.js",
     "preflight:clerk": "npm run build && node lib/scripts/clerk-path-preflight.js",
     "smoke:phase2b": "npm run build && node lib/scripts/phase2b-smoke.js",
     "smoke:phase2b:checklist": "SMOKE_CHECKLIST_ONLY=1 npm run smoke:phase2b"

@@ -71,9 +71,9 @@ lab_start_emulators() {
     if lab_port_up 8080 || lab_port_up 9099 || lab_port_up 5001; then
       lab_clear_partial_emulators
     fi
-    echo "Starting Firebase emulators (firestore,auth,functions) project=demo-seren..."
+    echo "Starting Firebase emulators (firestore,auth,functions,database) project=demo-seren..."
     npx firebase emulators:start \
-      --only firestore,auth,functions \
+      --only firestore,auth,functions,database \
       --config firebase/firebase.json \
       --project demo-seren \
       > /tmp/seren-firebase-emulators.log 2>&1 &
@@ -86,6 +86,11 @@ lab_start_emulators() {
     if ! lab_port_up 8080 || ! lab_port_up 9099 || ! lab_port_up 5001; then
       echo "Emulators failed — see /tmp/seren-firebase-emulators.log" >&2
       exit 1
+    fi
+    if lab_port_up 9000; then
+      echo "Realtime Database emulator up on :9000"
+    else
+      echo "Warning: RTDB emulator (:9000) not up — incidentTracks writes will be skipped" >&2
     fi
   else
     echo "Firebase emulators already up"

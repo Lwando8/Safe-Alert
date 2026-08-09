@@ -77,18 +77,13 @@ async function createTenantIncident(context, input) {
         authProvider: context.authProvider,
         timestamp: now,
     });
-    try {
-        await (0, firebaseApps_1.getRtdb)().ref(`incidentTracks/${incidentId}/points`).push({
-            lat: input.location.latitude,
-            lng: input.location.longitude,
-            t: now,
-            uid: actorUid(context),
-            organizationId: context.organizationId,
-        });
-    }
-    catch (err) {
-        console.error('incidentTracks RTDB write failed (non-fatal)', err);
-    }
+    await (0, firebaseApps_1.safeRtdbWrite)('incidentTracks:create', dbRtdb => dbRtdb.ref(`incidentTracks/${incidentId}/points`).push({
+        lat: input.location.latitude,
+        lng: input.location.longitude,
+        t: now,
+        uid: actorUid(context),
+        organizationId: context.organizationId,
+    }));
     await (0, recordAnalyticsEvent_1.recordAnalyticsEvent)({
         organizationId: context.organizationId,
         siteId: context.siteId,

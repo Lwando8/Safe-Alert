@@ -1,8 +1,8 @@
 # Golden-path verification evidence
 
-**Date:** 2026-08-08 (Android physical device pass); prior automation 2026-08-07  
-**Branch:** `mobile/integration-repair` (from `cursor/phase-2b-tenant-backend-8d10`)  
-**Rule:** Express SOS not cut over.
+**Date:** 2026-08-09 (physical SOS cutover lock); prior Android/iOS evidence 2026-08-08  
+**Branch:** `mobile/integration-repair`  
+**Rule:** Mobile SOS uses Firestore callables; Express SOS is legacy-only. **CUTOVER APPROVED: YES**
 
 **Canonical Clerk application:** Seren SOS (`real-guppy-12`).  
 Do **not** point mobile/web keys at Seren SOS Platform (`expert-drake-16`).
@@ -153,7 +153,7 @@ Operator confirmation: physical device responder path **PASS**.
 | Capability separation probe | PASS — security denied plumbing assign; facilities assigned same request → WO |
 | Seed tracks | default `SEED_RESPONDER_TRACK=security`; `facilities` / `hybrid` still supported |
 | UI branch gates | Map/Jobs show WOs only when facilities caps present; Jobs when incident caps |
-| Express SOS cutover | **IN PROGRESS** — mobile SOS/responder emergency on Firestore; physical matrix pending |
+| Express SOS cutover | **YES** — mobile SOS/responder emergency on Firestore (2026-08-09 physical lock) |
 
 ### iOS Simulator user evidence (2026-08-08)
 
@@ -233,9 +233,33 @@ Dev Client / Expo SDK 54. Canonical Clerk: **Seren SOS (`real-guppy-12`)**.
 
 ## Cutover
 
-**CUTOVER APPROVED: IN PROGRESS**
+**CUTOVER APPROVED: YES** (2026-08-09)
 
-Root Expo SOS + responder emergency use Firestore callables. Express remains for `scripts/express-sos-regression.js` and frozen `responder-app/`. Mark **YES** only after the 20-point physical matrix.
+Root Expo SOS + responder emergency use Firestore callables. Express remains for `scripts/express-sos-regression.js` and frozen `responder-app/`.
+
+### Physical lock evidence (2026-08-09)
+
+Lab: Metro LAN `192.168.0.253:8081` + Functions/Auth/Firestore/RTDB emulators (`demo-seren`) + platform Attach/Provision.
+
+| Check | Result |
+|-------|--------|
+| Student SOS (iPhone) | PASS — `createIncident` success UI; Firestore incident created |
+| Ops / Emulator same id | PASS — incident visible in Emulator UI + org list |
+| Responder soft-shift | PASS — PlatformSession `security_guard` / `ALPHA-12` |
+| Map nearby | PASS — red “Needs response” pin for open SOS |
+| My jobs + Accept | PASS — unassigned open SOS listed; Accept assigns unit + opens trip |
+| Lab smoke `probe:sos-cutover` | PASS 6/6 |
+| `probe:golden-path` | PASS (includes firestore SOS create + unit resolve) |
+
+### Lab smoke evidence (2026-08-09)
+
+Emulators + `npm run seed:phase2b`; then:
+
+| Check | Result |
+|-------|--------|
+| `npm run probe:golden-path` | PASS — includes `firestore-sos-create`, unit resolve by doc id + `ALPHA-12`→`unit_lab_alpha_12` |
+| `npm run probe:sos-cutover` | PASS 6/6 — create → ops list → unit resolve → accept + grant → tenant isolation |
+| RTDB in lab | Emulator on `:9000` and/or `safeRtdbWrite` skip/timeout so createIncident does not hang |
 
 ---
 
@@ -254,7 +278,7 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-seren \
 
 # Automation only
 npx firebase emulators:start --only firestore,auth,functions --config firebase/firebase.json --project demo-seren
-cd firebase/functions && npm run seed:phase2b && npm run probe:golden-path && npm run probe:phase2b
+cd firebase/functions && npm run seed:phase2b && npm run probe:golden-path && npm run probe:sos-cutover
 cd server && node index.js
 node scripts/express-sos-regression.js
 ```

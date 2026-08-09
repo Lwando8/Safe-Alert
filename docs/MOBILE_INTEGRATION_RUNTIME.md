@@ -129,7 +129,7 @@ Actor needs `public_metadata.platformAdmin=true`. Web must use Seren SOS keys an
 ## SOS cutover gate
 
 **Code path:** root Expo SOS + in-app responder emergency use Firestore callables (no Express dual-write).  
-**Physical matrix:** mark **CUTOVER APPROVED: YES** only after ALL criteria PASS on physical devices.
+**Physical matrix:** **CUTOVER APPROVED: YES** (2026-08-09). Criteria below remain the regression checklist for future changes.
 
 1. User creates emergency incident from iOS  
 2. User creates emergency incident from Android  
@@ -152,7 +152,7 @@ Actor needs `public_metadata.platformAdmin=true`. Web must use Seren SOS keys an
 19. Incident recoverable after app restart  
 20. Physical-device tests pass on both platforms  
 
-**CUTOVER APPROVED: IN PROGRESS** — mobile wired to Firestore; re-run physical matrix before YES.
+**CUTOVER APPROVED: YES** — mobile SOS + responder emergency on Firestore; Express `/alerts` legacy-only.
 
 ### Shadowing
 
