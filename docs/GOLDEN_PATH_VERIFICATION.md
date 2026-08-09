@@ -153,7 +153,7 @@ Operator confirmation: physical device responder path **PASS**.
 | Capability separation probe | PASS — security denied plumbing assign; facilities assigned same request → WO |
 | Seed tracks | default `SEED_RESPONDER_TRACK=security`; `facilities` / `hybrid` still supported |
 | UI branch gates | Map/Jobs show WOs only when facilities caps present; Jobs when incident caps |
-| Express SOS cutover | **NO** |
+| Express SOS cutover | **IN PROGRESS** — mobile SOS/responder emergency on Firestore; physical matrix pending |
 
 ### iOS Simulator user evidence (2026-08-08)
 
@@ -218,9 +218,9 @@ Dev Client / Expo SDK 54. Canonical Clerk: **Seren SOS (`real-guppy-12`)**.
 5. Ops web (Clerk org) assign → confirm push + WO id (dev client preferred for push).  
 6. Responder app → Work orders → complete → confirm same `workOrderId` / request resolved.  
 7. Logout → token `status=revoked`.  
-8. Express SOS on device: Home SOS (legacy path).  
-9. Confirm ops Firestore incidents **do not** receive Express SOS ids (split-brain still expected).  
-10. After every emulator restart: lab scripts re-seed phase2b; attach the Clerk user via **Platform → Organizations → Members** (student) or `--seed-clerk-user` (esp. responders).
+8. Firestore SOS on device: Home SOS → Emulator `incidents/{id}` + `/ops/incidents` same id.  
+9. Provision security responder → soft-shift → nearby → accept.  
+10. After every emulator restart: lab scripts re-seed phase2b; attach/provision via **Platform → Organizations**.
 
 ### Native blockers
 
@@ -233,9 +233,9 @@ Dev Client / Expo SDK 54. Canonical Clerk: **Seren SOS (`real-guppy-12`)**.
 
 ## Cutover
 
-**CUTOVER APPROVED: NO**
+**CUTOVER APPROVED: IN PROGRESS**
 
-Express SOS remains the accepted legacy emergency path. Golden-path automation covers Firestore maintenance only.
+Root Expo SOS + responder emergency use Firestore callables. Express remains for `scripts/express-sos-regression.js` and frozen `responder-app/`. Mark **YES** only after the 20-point physical matrix.
 
 ---
 

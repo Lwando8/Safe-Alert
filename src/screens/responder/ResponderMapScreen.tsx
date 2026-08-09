@@ -63,7 +63,7 @@ export default function ResponderMapScreen({ navigation, profile, onShiftEnded }
   const loadNearby = useCallback(
     async (lat: number, lng: number) => {
       try {
-        const data = await fetchNearbyIncidents(lat, lng, RESPONDER_MAP_RADIUS_KM);
+        const data = await fetchNearbyIncidents(lat, lng, RESPONDER_MAP_RADIUS_KM, profile);
         setIncidents(data.incidents);
         setActiveJob(data.activeJob?.incidentId ?? null);
         if (selected) {
@@ -74,7 +74,7 @@ export default function ResponderMapScreen({ navigation, profile, onShiftEnded }
         console.error('nearby load error', err);
       }
     },
-    [selected]
+    [selected, profile]
   );
 
   const refreshMap = useCallback(async () => {

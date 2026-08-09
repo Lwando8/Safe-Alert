@@ -61,11 +61,12 @@ Actor needs `public_metadata.platformAdmin=true`. Web must use Seren SOS keys an
 | Surface | Authoritative path today |
 |---------|--------------------------|
 | **Ops / platform web** | Clerk + Firestore/Functions (`seren-sos` when deployed; emulator `demo-seren`) |
-| **User mobile SOS** | **Legacy Express** `POST /alerts` → `server/data/store.json` → in-app responder Express queue |
+| **User mobile SOS** | Firestore `createIncident` / `appendIncidentLocation` (via platform bridge) |
 | **User mobile Report / Community / My Services** | Firebase callables after **platform bridge** |
-| **Responder mobile emergency** | Same Expo binary (`src/screens/responder/*`) → Express queue |
+| **Responder mobile emergency** | Firestore `getNearbyIncidents` / `acceptIncident` / `updateIncidentStatus` (+ soft-shift for Clerk units) |
 | **Responder mobile work orders** | Firestore callables (`listMyWorkOrdersCallable` / `updateWorkOrderStatusCallable`) |
 | **Standalone `responder-app/`** | **Legacy duplicate** — Express-only; do not extend |
+| **Express `/alerts`** | Legacy regression only (`scripts/express-sos-regression.js`) — not used by root Expo SOS |
 
 ### Canonical responder app
 
@@ -78,7 +79,7 @@ Actor needs `public_metadata.platformAdmin=true`. Web must use Seren SOS keys an
 
 | Concern | Today | Transitional | Eventually remove |
 |---------|-------|--------------|-------------------|
-| Emergency SOS | Express | Keep until cutover gate | Express SOS + JSON store |
+| Emergency SOS | **Firestore callables** (cutover in progress) | Re-evidence 20-point physical matrix | Express SOS + JSON store + `responder-app/` |
 | Identity | Express JWT + optional Firebase bridge | Clerk prep + `issueFirebaseBridgeTokenCallable` | Express citizen auth |
 | Push devices | `orgDevices/{org}/tokens` | Mobile registers after bridge | Unscoped `fcmTokens` without org |
 | Maintenance | Firestore requests/WOs | Responder mobile queue live | — |
@@ -127,7 +128,8 @@ Actor needs `public_metadata.platformAdmin=true`. Web must use Seren SOS keys an
 
 ## SOS cutover gate
 
-**Do not remove Express SOS until ALL criteria PASS on physical devices.**
+**Code path:** root Expo SOS + in-app responder emergency use Firestore callables (no Express dual-write).  
+**Physical matrix:** mark **CUTOVER APPROVED: YES** only after ALL criteria PASS on physical devices.
 
 1. User creates emergency incident from iOS  
 2. User creates emergency incident from Android  
@@ -150,11 +152,11 @@ Actor needs `public_metadata.platformAdmin=true`. Web must use Seren SOS keys an
 19. Incident recoverable after app restart  
 20. Physical-device tests pass on both platforms  
 
-**CUTOVER APPROVED: NO** (until the matrix above is evidenced).
+**CUTOVER APPROVED: IN PROGRESS** — mobile wired to Firestore; re-run physical matrix before YES.
 
 ### Shadowing
 
-Do **not** dual-dispatch Express + Firestore. Safer alternative: keep Express authoritative for emergency until cutover; use Firestore only for maintenance/ops; document seam observability via this note + probes.
+Do **not** dual-dispatch Express + Firestore. Express `/alerts` remains for legacy regression / `responder-app/` only.
 
 ---
 
@@ -164,8 +166,9 @@ Central modules:
 
 - `src/services/PlatformClient.ts` — bridge establish, org device register/revoke, org switch
 - `src/context/PlatformSessionContext.tsx` — post-login session for person/org/membership
-- `src/services/FirebaseCallables.ts` — callable transport
-- Express SOS remains on `ApiClient` / `DispatchApi`
+- `src/services/FirebaseCallables.ts` — callable transport (including SOS incident callables)
+- Emergency SOS: `EmergencyDispatchService` → `createIncident` / `appendIncidentLocation`
+- Responder emergency: `ResponderService` → `getNearbyIncidents` / `acceptIncident` / `updateIncidentStatus`
 
 Bridge paths (unchanged contract): existing Firebase auth → Clerk session token → operator mint secret (emulator only).
 

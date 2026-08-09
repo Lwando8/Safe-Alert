@@ -31,7 +31,17 @@ function assignmentVisibleToResponder(
   assignment: NonNullable<DispatchAlert['assignments']>[number],
   profile: ResponderProfile
 ) {
-  if (!rolesMatch(assignment.role, profile.role)) return false;
+  // Firestore path: match by unit id/code first (role may be police vs profile police)
+  if (
+    assignment.responderUnitId === profile.id ||
+    assignment.responderUnitId === profile.unitCode ||
+    assignment.responderId === profile.id ||
+    assignment.responderId === profile.unitCode ||
+    assignment.name === profile.unitCode
+  ) {
+    return true;
+  }
+  if (!rolesMatch(String(assignment.role), profile.role)) return false;
   if (
     assignment.role === 'armed_response' &&
     profile.providerId &&
@@ -51,6 +61,8 @@ function findMyAssignment(
       a.responderId === profile.unitCode ||
       a.responderId === profile.id ||
       a.responderUnitId === profile.id ||
+      a.responderUnitId === profile.unitCode ||
+      a.name === profile.unitCode ||
       assignmentVisibleToResponder(a, profile)
   );
 }
@@ -65,7 +77,7 @@ export default function ResponderAssignmentsScreen({ navigation, profile, onShif
   const loadAlerts = async () => {
     setRefreshing(true);
     try {
-      const data = await fetchAssignments();
+      const data = await fetchAssignments(profile);
       setAlerts(data);
     } catch (err) {
       console.error(err);

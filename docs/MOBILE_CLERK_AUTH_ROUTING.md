@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-07  
 **Branch:** `mobile/integration-repair`  
-**SOS CUTOVER: NO**
+**SOS CUTOVER: IN PROGRESS** (mobile on Firestore; physical matrix pending)
 
 ## Inventory (Step 1)
 
@@ -17,7 +17,7 @@ Clerk sign-in
 → resolvePlatformSessionCallable (Person + membership + capabilities)
 → PlatformSession ready
 → experience routing (user | responder)
-→ silent Express clerk-compat JWT for SOS only
+→ Firestore SOS / WO callables (Express SOS no longer used by root Expo)
 ```
 
 Routing uses membership `kind` / permissions / capabilities / `unitId` — **never email**.

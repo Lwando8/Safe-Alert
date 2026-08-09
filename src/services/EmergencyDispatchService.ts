@@ -1,8 +1,11 @@
 import { Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
-import { ApiConnectionError } from './ApiClient';
-import { AlertType, createAlert, sendLocationUpdate } from './DispatchApi';
+import {
+  appendIncidentLocationMobile,
+  createIncidentMobile,
+} from './FirebaseCallables';
+
+export type AlertType = 'sos' | 'security' | 'medical';
 
 export type DispatchAlertResult = {
   id: string;
@@ -28,9 +31,12 @@ export function streamLocation(alertId: string): void {
   const pushUpdate = async () => {
     try {
       const current = await Location.getCurrentPositionAsync({});
-      await sendLocationUpdate(alertId, {
-        latitude: current.coords.latitude,
-        longitude: current.coords.longitude,
+      await appendIncidentLocationMobile({
+        incidentId: alertId,
+        location: {
+          latitude: current.coords.latitude,
+          longitude: current.coords.longitude,
+        },
       });
     } catch (err) {
       console.error('Location stream error', err);
@@ -39,17 +45,6 @@ export function streamLocation(alertId: string): void {
 
   pushUpdate();
   locationStreamTimer = setInterval(pushUpdate, 15000);
-}
-
-async function resolveProviderId(): Promise<string | undefined> {
-  try {
-    const userJson = await AsyncStorage.getItem('user');
-    if (!userJson) return undefined;
-    const parsed = JSON.parse(userJson);
-    return parsed?.providerId || parsed?.armedResponseProviderId || undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 async function resolveLocation(
@@ -63,28 +58,38 @@ async function resolveLocation(
   return Location.getCurrentPositionAsync({});
 }
 
+/**
+ * Create emergency incident via Firestore callables (SOS Express cutover).
+ * Requires PlatformSession + Firebase bridge — no Express fallback.
+ */
 export async function sendAlertToDispatch(
   type: AlertType,
   existingLocation?: Location.LocationObject | null,
   meta?: Record<string, unknown>
 ): Promise<DispatchAlertResult> {
-  const providerId = await resolveProviderId();
   const currentLocation = await resolveLocation(existingLocation);
 
-  const response = await createAlert(
+  const incident = await createIncidentMobile({
     type,
-    {
+    location: {
       latitude: currentLocation.coords.latitude,
       longitude: currentLocation.coords.longitude,
     },
-    {
-      providerId,
-      meta: { source: 'mobile-app', ...meta },
-    }
-  );
+    meta: { source: 'mobile-app', ...meta },
+  });
 
-  streamLocation(response.id);
-  return response;
+  const id = String(incident.id || '');
+  if (!id) {
+    throw new Error('Incident create returned no id — check PlatformSession / Firebase bridge.');
+  }
+
+  streamLocation(id);
+  return {
+    id,
+    assignments: Array.isArray(incident.assignments)
+      ? (incident.assignments as DispatchAlertResult['assignments'])
+      : [],
+  };
 }
 
 function formatAssignmentMessage(type: AlertType, response: DispatchAlertResult): string {
@@ -94,17 +99,15 @@ function formatAssignmentMessage(type: AlertType, response: DispatchAlertResult)
         `${a.role.toUpperCase()} • ${a.distanceKm ?? '?'}km • ETA ${a.etaMinutes ?? '?'}m`
     )
     .join('\n');
-  return assignmentText || 'Dispatch notified and location tracking started.';
+  return assignmentText || 'Emergency recorded. Responders notified when eligible.';
 }
 
 export function showDispatchError(error: unknown): void {
   const message =
-    error instanceof ApiConnectionError
+    error instanceof Error
       ? error.message
-      : error instanceof Error
-        ? error.message
-        : 'Failed to contact dispatch. Please try again.';
-  Alert.alert('Error', message);
+      : 'Unable to send emergency alert. Ensure you are signed in with an active organisation membership.';
+  Alert.alert('Emergency alert failed', message);
 }
 
 export async function sendSosAlertWithFeedback(
@@ -113,12 +116,9 @@ export async function sendSosAlertWithFeedback(
 ): Promise<DispatchAlertResult | null> {
   try {
     const response = await sendAlertToDispatch('sos', existingLocation, meta);
-    Alert.alert('SOS ALERT SENT', formatAssignmentMessage('sos', response), [
-      { text: 'OK' },
-    ]);
+    Alert.alert('SOS sent', formatAssignmentMessage('sos', response));
     return response;
   } catch (error) {
-    console.error('Error sending SOS alert', error);
     showDispatchError(error);
     return null;
   }
@@ -131,13 +131,11 @@ export async function sendTypedAlertWithFeedback(
   try {
     const response = await sendAlertToDispatch(type, existingLocation);
     Alert.alert(
-      `${type.toUpperCase()} ALERT SENT`,
-      formatAssignmentMessage(type, response),
-      [{ text: 'OK' }]
+      type === 'sos' ? 'SOS sent' : 'Alert sent',
+      formatAssignmentMessage(type, response)
     );
     return response;
   } catch (error) {
-    console.error('Error sending alert', error);
     showDispatchError(error);
     return null;
   }
@@ -150,7 +148,7 @@ export function confirmAndSendSosAlert(
 ): void {
   Alert.alert(
     'EMERGENCY SOS',
-    'This will immediately send an emergency alert to dispatch with your location. Continue?',
+    'This will create an emergency incident for your organisation responders with your location. Continue?',
     [
       { text: 'Cancel', style: 'cancel', onPress: () => onComplete?.(null) },
       {

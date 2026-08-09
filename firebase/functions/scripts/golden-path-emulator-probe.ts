@@ -1,10 +1,11 @@
 /**
- * Golden-path probe — maintenance flow on Firestore emulator (no Express cutover).
+ * Golden-path probe — maintenance + Firestore SOS on emulator (mobile Express SOS cut over).
  *
  * Proves:
  *   identity link / bridge context → orgDevices register → Report Issue
  *   → ops assign (work order) → responder list/update/complete → revoke device
  *   → cross-tenant denial
+ *   → Firestore createIncident + unit resolve for accept
  *
  * Prerequisites:
  *   firebase emulators:start --only firestore,auth --config firebase/firebase.json --project demo-seren
@@ -339,11 +340,82 @@ async function main() {
     record('orgDevices-revoke', false, err instanceof Error ? err.message : String(err));
   }
 
-  // 10) Explicit: Express SOS not invoked here
+  // 10) Firestore SOS create + unit resolve (mobile Express cutover path)
+  try {
+    const { createTenantIncident } = await import('../src/incidents/tenantIncidentService');
+    const { resolveResponderUnitForContext } = await import(
+      '../src/services/resolveResponderUnit'
+    );
+    const incident = await createTenantIncident(studentContext as never, {
+      type: 'sos',
+      location: { latitude: -33.9249, longitude: 18.4241 },
+      meta: { source: 'golden-path-probe' },
+    });
+    const incidentId = String(incident.id);
+    const snap = await db.doc(`incidents/${incidentId}`).get();
+    const data = snap.data() as { organizationId?: string; type?: string };
+    record(
+      'firestore-sos-create',
+      snap.exists && data.organizationId === 'university-a' && data.type === 'sos',
+      `incidentId=${incidentId}`
+    );
+
+    const responderCtx = ctx({
+      authUserId: 'user_clerk_a_responder',
+      userId: 'user_clerk_a_responder',
+      membershipId: 'mem_a_responder',
+      role: 'security_guard',
+      clerkRole: 'org:responder',
+      firebaseUid: 'firebase_uid_a_responder',
+      unitId: 'unit_a1',
+      permissions: [
+        'incidents:read-all',
+        'incidents:acknowledge',
+        'incidents:update',
+        'responders:read',
+        'sites:read',
+      ],
+    });
+    const unit = await resolveResponderUnitForContext(responderCtx as never);
+    record(
+      'firestore-sos-unit-resolve',
+      unit.docId === 'unit_a1' && unit.unitCode === 'UNIT-A1',
+      `docId=${unit.docId} unitCode=${unit.unitCode}`
+    );
+
+    // Platform-style unitCode lookup (ALPHA-12 → unit_lab_*)
+    await db.doc('responderUnits/unit_lab_alpha_12').set(
+      {
+        id: 'unit_lab_alpha_12',
+        unitCode: 'ALPHA-12',
+        responderType: 'police',
+        capabilities: ['INCIDENT_RESPONSE', 'PATROL'],
+        organizationId: 'university-a',
+        active: true,
+      },
+      { merge: true }
+    );
+    const platformUnit = await resolveResponderUnitForContext(
+      ctx({
+        unitId: 'ALPHA-12',
+        role: 'security_guard',
+        permissions: ['incidents:read-all', 'incidents:acknowledge'],
+      }) as never
+    );
+    record(
+      'firestore-sos-unit-by-code',
+      platformUnit.docId === 'unit_lab_alpha_12',
+      `docId=${platformUnit.docId}`
+    );
+  } catch (err) {
+    record('firestore-sos-create', false, err instanceof Error ? err.message : String(err));
+  }
+
+  // Express SOS remains available for legacy regression scripts only — mobile no longer uses it
   record(
-    'express-sos-untouched',
+    'express-sos-legacy-only',
     true,
-    'Golden path uses Firestore only; Express SOS cutover NOT performed'
+    'Mobile SOS cut over to Firestore; Express kept for scripts/express-sos-regression.js + responder-app'
   );
 
   finish();

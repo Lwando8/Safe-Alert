@@ -2,12 +2,13 @@
  * Firebase callable bridge for new platform features.
  * New writes go through callables — do not grow Express for Operations/Community.
  *
- * Auth bridge (transitional, SOS Express unchanged):
+ * Auth bridge:
  * 1. Existing Firebase Auth session
  * 2. Stored custom token (`firebaseCustomToken`)
  * 3. Clerk session token → issueFirebaseBridgeTokenCallable → custom token
  * 4. Optional operator mint (emulator) via EXPO_PUBLIC_MOBILE_BRIDGE_MINT_SECRET
  *
+ * Emergency SOS uses createIncident / appendIncidentLocation (Firestore cutover).
  * Tenant is stamped server-side from membership — never send organizationId.
  */
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
@@ -410,4 +411,57 @@ export async function updateWorkOrderStatusMobile(input: {
   resolutionSummary?: string;
 }) {
   return callTenantCallable('updateWorkOrderStatusCallable', input);
+}
+
+/** Firestore SOS / emergency path (Express cutover). Never send organizationId. */
+export async function createIncidentMobile(input: {
+  type: string;
+  location: { latitude: number; longitude: number };
+  meta?: Record<string, unknown>;
+}) {
+  return callTenantCallable<typeof input, Record<string, unknown>>('createIncident', input);
+}
+
+export async function appendIncidentLocationMobile(input: {
+  incidentId: string;
+  location: { latitude: number; longitude: number };
+}) {
+  return callTenantCallable('appendIncidentLocation', input);
+}
+
+export async function getNearbyIncidentsMobile(input: {
+  latitude: number;
+  longitude: number;
+  radiusKm?: number;
+}) {
+  return callTenantCallable<
+    typeof input,
+    {
+      radiusKm?: number;
+      center?: { latitude: number; longitude: number } | null;
+      incidents?: Array<Record<string, unknown>>;
+    }
+  >('getNearbyIncidents', input);
+}
+
+export async function listOrgIncidentsMobile(input?: { status?: string; limit?: number }) {
+  return callTenantCallable<
+    { status?: string; limit?: number },
+    { incidents?: Array<Record<string, unknown>> }
+  >('listOrgIncidents', input || {});
+}
+
+export async function getIncidentMobile(incidentId: string) {
+  return callTenantCallable<{ incidentId: string }, { incident: Record<string, unknown> }>(
+    'getIncident',
+    { incidentId }
+  );
+}
+
+export async function acceptIncidentMobile(incidentId: string) {
+  return callTenantCallable('acceptIncident', { incidentId });
+}
+
+export async function updateIncidentStatusMobile(incidentId: string, status: string) {
+  return callTenantCallable('updateIncidentStatus', { incidentId, status });
 }

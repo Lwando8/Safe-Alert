@@ -9,8 +9,8 @@ import {
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { fetchAlert } from '../../services/DispatchApi';
 import {
+  fetchIncident,
   sendUnitHeartbeat,
   updateIncidentStatus,
 } from '../../services/ResponderService';
@@ -40,7 +40,9 @@ export default function ResponderAlertDetailScreen({ route, profile }: Props) {
       a =>
         a.responderId === profile.unitCode ||
         a.responderId === profile.id ||
-        a.responderUnitId === profile.id
+        a.responderUnitId === profile.id ||
+        a.responderUnitId === profile.unitCode ||
+        a.name === profile.unitCode
     );
   }, [alert, profile]);
 
@@ -61,7 +63,7 @@ export default function ResponderAlertDetailScreen({ route, profile }: Props) {
 
   const load = async () => {
     try {
-      setAlert(await fetchAlert(alertId));
+      setAlert(await fetchIncident(alertId));
     } catch (err) {
       console.error(err);
     }
@@ -115,7 +117,7 @@ export default function ResponderAlertDetailScreen({ route, profile }: Props) {
         await sendUnitHeartbeat(profile, status);
       }
       await updateIncidentStatus(alertId, status);
-      setAlert(await fetchAlert(alertId));
+      setAlert(await fetchIncident(alertId));
       if (status !== 'resolved') {
         startHeartbeat(status);
       } else {

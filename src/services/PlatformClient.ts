@@ -1,7 +1,7 @@
 /**
  * Shared mobile platform client boundary.
  *
- * Express SOS remains on ApiClient / DispatchApi.
+ * Emergency SOS uses Firestore callables (createIncident); Express /alerts is legacy-only.
  * Firestore platform features go through FirebaseCallables after bridge establish.
  *
  * Screens should not independently decide Express vs callable vs hard-coded URLs

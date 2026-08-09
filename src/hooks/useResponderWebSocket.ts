@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { dispatchWsUrl } from '../services/DispatchApi';
 import { DispatchAlert } from '../types/dispatch';
 
 type Handlers = {
@@ -12,38 +11,15 @@ type Handlers = {
   }) => void;
 };
 
-export function useResponderWebSocket(handlers: Handlers) {
-  const handlersRef = useRef(handlers);
-  handlersRef.current = handlers;
+/**
+ * After Firestore SOS cutover, Express WebSocket is not authoritative.
+ * Hook is a no-op; ResponderMapScreen polling refreshes nearby incidents.
+ */
+export function useResponderWebSocket(_handlers: Handlers) {
+  const handlersRef = useRef(_handlers);
+  handlersRef.current = _handlers;
 
   useEffect(() => {
-    const socket = new WebSocket(dispatchWsUrl());
-
-    socket.onopen = () => {
-      socket.send(JSON.stringify({ type: 'subscribe_all' }));
-    };
-
-    socket.onmessage = event => {
-      try {
-        const data = JSON.parse(event.data);
-        const h = handlersRef.current;
-        if (data.event === 'alert_created' && h.onAlertCreated) {
-          h.onAlertCreated(data.alert);
-        }
-        if (data.event === 'alert_snapshot' && data.alert && h.onAlertSnapshot) {
-          h.onAlertSnapshot(data.alert);
-        }
-        if (data.event === 'location_update' && h.onLocation) {
-          h.onLocation({ alertId: data.alertId, location: data.location });
-        }
-        if (data.event === 'assignment_status' && h.onAssignmentStatus) {
-          h.onAssignmentStatus(data);
-        }
-      } catch (err) {
-        console.log('WS parse error', err);
-      }
-    };
-
-    return () => socket.close();
+    // Intentionally disconnected — do not open Express WS for Firestore incidents.
   }, []);
 }

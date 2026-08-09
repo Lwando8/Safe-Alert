@@ -1,6 +1,7 @@
 /**
- * Express SOS regression — proves legacy emergency path still works.
- * Does NOT touch Firestore SOS / cutover.
+ * Express SOS regression — legacy emergency path only.
+ * Root Expo SOS has cut over to Firestore callables; this script keeps Express healthy
+ * for responder-app / historical probes. It does NOT assert mobile cutover.
  *
  * Usage:
  *   EXPRESS_BASE_URL=http://127.0.0.1:4000 node scripts/express-sos-regression.js

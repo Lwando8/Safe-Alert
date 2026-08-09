@@ -86,13 +86,17 @@ export async function createTenantIncident(
     authProvider: context.authProvider,
     timestamp: now,
   });
-  await getRtdb().ref(`incidentTracks/${incidentId}/points`).push({
-    lat: input.location.latitude,
-    lng: input.location.longitude,
-    t: now,
-    uid: actorUid(context),
-    organizationId: context.organizationId,
-  });
+  try {
+    await getRtdb().ref(`incidentTracks/${incidentId}/points`).push({
+      lat: input.location.latitude,
+      lng: input.location.longitude,
+      t: now,
+      uid: actorUid(context),
+      organizationId: context.organizationId,
+    });
+  } catch (err) {
+    console.error('incidentTracks RTDB write failed (non-fatal)', err);
+  }
 
   await recordAnalyticsEvent({
     organizationId: context.organizationId,

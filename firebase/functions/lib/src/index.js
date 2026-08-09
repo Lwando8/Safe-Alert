@@ -33,7 +33,8 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.issueFirebaseBridgeTokenCallable = exports.listRideSafetyRequestsCallable = exports.createRideSafetyRequestCallable = exports.getMyServicesCallable = exports.listAnalyticsEventsCallable = exports.updateOrgTenantSettings = exports.getOrgTenantSettings = exports.retractBroadcastCallable = exports.listBroadcastsCallable = exports.createBroadcastCallable = exports.listAlertSightingsCallable = exports.addAlertSightingCallable = exports.resolveCommunityAlertCallable = exports.listCommunityAlertsCallable = exports.createCommunityAlertCallable = exports.listCommunityEventsCallable = exports.createCommunityEventCallable = exports.joinCommunityGroupCallable = exports.listCommunityGroupsCallable = exports.createCommunityGroupCallable = exports.updateWorkOrderStatusCallable = exports.getWorkOrderCallable = exports.listMyWorkOrdersCallable = exports.assignOperationalRequestCallable = exports.updateOperationalRequestStatusCallable = exports.listOperationalRequestsCallable = exports.createOperationalRequestCallable = exports.legacyApiProxy = exports.health = exports.unitHeartbeat = exports.endShift = exports.startShift = exports.linkIdentity = exports.bootstrapOrganizationMemberships = exports.onIncidentCreatedNotify = exports.resolvePlatformSessionCallable = exports.revokePushTokenCallable = exports.registerPushToken = exports.assignUnitToIncident = exports.updateIncidentStatus = exports.acceptIncident = exports.listOrgIncidents = exports.getNearbyIncidents = exports.appendIncidentLocation = exports.createIncident = exports.loginAdmin = exports.loginResponder = exports.resolveDeviceAccess = exports.registerCitizen = exports.clerkWebhook = void 0;
+exports.listRideSafetyRequestsCallable = exports.createRideSafetyRequestCallable = exports.getMyServicesCallable = exports.listAnalyticsEventsCallable = exports.updateOrgTenantSettings = exports.getOrgTenantSettings = exports.retractBroadcastCallable = exports.listBroadcastsCallable = exports.createBroadcastCallable = exports.listAlertSightingsCallable = exports.addAlertSightingCallable = exports.resolveCommunityAlertCallable = exports.listCommunityAlertsCallable = exports.createCommunityAlertCallable = exports.listCommunityEventsCallable = exports.createCommunityEventCallable = exports.joinCommunityGroupCallable = exports.listCommunityGroupsCallable = exports.createCommunityGroupCallable = exports.updateWorkOrderStatusCallable = exports.getWorkOrderCallable = exports.listMyWorkOrdersCallable = exports.assignOperationalRequestCallable = exports.updateOperationalRequestStatusCallable = exports.listOperationalRequestsCallable = exports.createOperationalRequestCallable = exports.legacyApiProxy = exports.health = exports.unitHeartbeat = exports.endShift = exports.startShift = exports.linkIdentity = exports.bootstrapOrganizationMemberships = exports.onIncidentCreatedNotify = exports.resolvePlatformSessionCallable = exports.revokePushTokenCallable = exports.registerPushToken = exports.assignUnitToIncident = exports.updateIncidentStatus = exports.acceptIncident = exports.getIncident = exports.listOrgIncidents = exports.getNearbyIncidents = exports.appendIncidentLocation = exports.createIncident = exports.loginAdmin = exports.loginResponder = exports.resolveDeviceAccess = exports.registerCitizen = exports.clerkWebhook = void 0;
+exports.issueFirebaseBridgeTokenCallable = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const requestContext_1 = require("./middleware/requestContext");
@@ -223,13 +224,18 @@ exports.appendIncidentLocation = (0, https_1.onCall)(async (req) => {
         });
     }
     await ref.set({ lastLocation: location, updatedAt: now() }, { merge: true });
-    await (0, firebaseApps_1.getRtdb)().ref(`incidentTracks/${incidentId}/points`).push({
-        lat: location.latitude,
-        lng: location.longitude,
-        t: now(),
-        uid: (0, tenantIncidentService_1.actorUid)(context),
-        organizationId: context.organizationId,
-    });
+    try {
+        await (0, firebaseApps_1.getRtdb)().ref(`incidentTracks/${incidentId}/points`).push({
+            lat: location.latitude,
+            lng: location.longitude,
+            t: now(),
+            uid: (0, tenantIncidentService_1.actorUid)(context),
+            organizationId: context.organizationId,
+        });
+    }
+    catch (err) {
+        console.error('appendIncidentLocation RTDB write failed (non-fatal)', err);
+    }
     return { ok: true, viaGrant };
 });
 exports.getNearbyIncidents = (0, https_1.onCall)(async (req) => {
@@ -297,6 +303,19 @@ exports.listOrgIncidents = (0, https_1.onCall)(async (req) => {
         limit: typeof limit === 'number' ? limit : 100,
     });
 });
+/** Single incident by id (tenant-checked) — mobile detail after Firestore SOS cutover */
+exports.getIncident = (0, https_1.onCall)(async (req) => {
+    const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
+    const { incidentId } = req.data || {};
+    if (!incidentId)
+        throw new https_1.HttpsError('invalid-argument', 'incidentId required');
+    const { data } = await (0, tenantIncidentService_1.loadIncidentInTenant)(String(incidentId), context);
+    const isOwner = data.userId === context.userId || data.personId === context.userId;
+    if (!isOwner) {
+        (0, requestContext_1.authorize)(context, { permission: 'incidents:read-all' });
+    }
+    return { incident: { id: String(incidentId), ...data } };
+});
 exports.acceptIncident = (0, https_1.onCall)(async (req) => {
     const context = await (0, requestContext_1.resolveRequestContextFromCallable)(req);
     const { authorizeAction } = await Promise.resolve().then(() => __importStar(require('./policy/authorizeAction')));
@@ -305,30 +324,26 @@ exports.acceptIncident = (0, https_1.onCall)(async (req) => {
     if (!incidentId)
         throw new https_1.HttpsError('invalid-argument', 'incidentId required');
     const { ref, data } = await (0, tenantIncidentService_1.loadIncidentInTenant)(String(incidentId), context);
-    const unitId = String(context.unitId || '');
-    if (!unitId) {
-        throw new https_1.HttpsError('failed-precondition', 'No responder unit bound to membership');
-    }
+    const { resolveResponderUnitForContext, assignmentMatchesUnit } = await Promise.resolve().then(() => __importStar(require('./services/resolveResponderUnit')));
+    const unit = await resolveResponderUnitForContext(context);
     // Phase D: security capability gate — maintenance units cannot accept SOS incidents
     const { canRespondToIncident } = await Promise.resolve().then(() => __importStar(require('./services/responderCapabilities')));
-    const unitSnap = await db.doc(`responderUnits/${unitId}`).get();
-    const unit = unitSnap.exists
-        ? unitSnap.data()
-        : null;
     if (!canRespondToIncident({
-        capabilities: unit?.capabilities,
-        responderType: unit?.responderType,
+        capabilities: unit.capabilities,
+        responderType: unit.responderType,
         membershipKind: context.role,
         incidentType: String(data.type || data.category || ''),
     })) {
         throw new https_1.HttpsError('failed-precondition', 'Responder lacks INCIDENT_RESPONSE capability for emergency incidents');
     }
     const assignments = [...(data.assignments || [])];
-    const existing = assignments.find(a => String(a.responderUnitId) === unitId);
+    const existing = assignments.find(a => assignmentMatchesUnit(a, unit));
     if (!existing) {
         assignments.push({
-            responderUnitId: unitId,
-            responderId: unitId,
+            responderUnitId: unit.docId,
+            responderId: unit.docId,
+            unitCode: unit.unitCode,
+            role: unit.responderType || 'responder',
             status: 'accepted',
             organizationId: context.organizationId,
             timestamps: { accepted: now() },
@@ -352,7 +367,7 @@ exports.acceptIncident = (0, https_1.onCall)(async (req) => {
             subjectPersonId: String(data.userId || ''),
             granteeOrganisationId: context.organizationId,
             granteePersonId: context.userId,
-            granteeResponderId: unitId,
+            granteeResponderId: unit.docId,
             sourceMembershipId: context.membershipId,
             now: now(),
             incidentResolved: String(data.status || '') === 'resolved',
@@ -396,8 +411,15 @@ exports.updateIncidentStatus = (0, https_1.onCall)(async (req) => {
         });
     }
     const { ref, data } = await (0, tenantIncidentService_1.loadIncidentInTenant)(String(incidentId), context);
-    const unitId = String(context.unitId || '');
-    const assignments = (data.assignments || []).map(a => String(a.responderUnitId) === unitId
+    const { resolveResponderUnitForContext, assignmentMatchesUnit } = await Promise.resolve().then(() => __importStar(require('./services/resolveResponderUnit')));
+    let unit = null;
+    try {
+        unit = await resolveResponderUnitForContext(context);
+    }
+    catch {
+        // Grant-only actors may lack a unit — leave assignments unchanged
+    }
+    const assignments = (data.assignments || []).map(a => unit && assignmentMatchesUnit(a, unit)
         ? { ...a, status, timestamps: { ...a.timestamps, [status]: now() } }
         : a);
     await ref.set({ assignments, updatedAt: now() }, { merge: true });

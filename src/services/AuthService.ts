@@ -186,7 +186,7 @@ export async function persistSession(session: AuthSession): Promise<void> {
     await AsyncStorage.removeItem(ACTIVE_SHIFT_KEY);
   }
 
-  // Central Firebase/platform bridge — best-effort; Express SOS stays independent.
+  // Central Firebase/platform bridge — best-effort after Express or Clerk login.
   // Prefer org from responder unit when present; otherwise PlatformClient resolves membership.
   try {
     const { establishPlatformBridge } = await import('./PlatformClient');

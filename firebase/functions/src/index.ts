@@ -255,13 +255,17 @@ export const appendIncidentLocation = onCall(async req => {
   }
 
   await ref.set({ lastLocation: location, updatedAt: now() }, { merge: true });
-  await getRtdb().ref(`incidentTracks/${incidentId}/points`).push({
-    lat: location.latitude,
-    lng: location.longitude,
-    t: now(),
-    uid: actorUid(context),
-    organizationId: context.organizationId,
-  });
+  try {
+    await getRtdb().ref(`incidentTracks/${incidentId}/points`).push({
+      lat: location.latitude,
+      lng: location.longitude,
+      t: now(),
+      uid: actorUid(context),
+      organizationId: context.organizationId,
+    });
+  } catch (err) {
+    console.error('appendIncidentLocation RTDB write failed (non-fatal)', err);
+  }
   return { ok: true, viaGrant };
 });
 
@@ -347,6 +351,19 @@ export const listOrgIncidents = onCall(async req => {
   });
 });
 
+/** Single incident by id (tenant-checked) — mobile detail after Firestore SOS cutover */
+export const getIncident = onCall(async req => {
+  const context = await resolveRequestContextFromCallable(req);
+  const { incidentId } = req.data || {};
+  if (!incidentId) throw new HttpsError('invalid-argument', 'incidentId required');
+  const { data } = await loadIncidentInTenant(String(incidentId), context);
+  const isOwner = data.userId === context.userId || data.personId === context.userId;
+  if (!isOwner) {
+    authorize(context, { permission: 'incidents:read-all' });
+  }
+  return { incident: { id: String(incidentId), ...data } };
+});
+
 export const acceptIncident = onCall(async req => {
   const context = await resolveRequestContextFromCallable(req);
   const { authorizeAction } = await import('./policy/authorizeAction');
@@ -356,21 +373,17 @@ export const acceptIncident = onCall(async req => {
   if (!incidentId) throw new HttpsError('invalid-argument', 'incidentId required');
 
   const { ref, data } = await loadIncidentInTenant(String(incidentId), context);
-  const unitId = String(context.unitId || '');
-  if (!unitId) {
-    throw new HttpsError('failed-precondition', 'No responder unit bound to membership');
-  }
+  const { resolveResponderUnitForContext, assignmentMatchesUnit } = await import(
+    './services/resolveResponderUnit'
+  );
+  const unit = await resolveResponderUnitForContext(context);
 
   // Phase D: security capability gate — maintenance units cannot accept SOS incidents
   const { canRespondToIncident } = await import('./services/responderCapabilities');
-  const unitSnap = await db.doc(`responderUnits/${unitId}`).get();
-  const unit = unitSnap.exists
-    ? (unitSnap.data() as { responderType?: string; capabilities?: string[] })
-    : null;
   if (
     !canRespondToIncident({
-      capabilities: unit?.capabilities,
-      responderType: unit?.responderType,
+      capabilities: unit.capabilities,
+      responderType: unit.responderType,
       membershipKind: context.role,
       incidentType: String(data.type || data.category || ''),
     })
@@ -382,11 +395,13 @@ export const acceptIncident = onCall(async req => {
   }
 
   const assignments = [...((data.assignments as Array<Record<string, unknown>>) || [])];
-  const existing = assignments.find(a => String(a.responderUnitId) === unitId);
+  const existing = assignments.find(a => assignmentMatchesUnit(a, unit));
   if (!existing) {
     assignments.push({
-      responderUnitId: unitId,
-      responderId: unitId,
+      responderUnitId: unit.docId,
+      responderId: unit.docId,
+      unitCode: unit.unitCode,
+      role: unit.responderType || 'responder',
       status: 'accepted',
       organizationId: context.organizationId,
       timestamps: { accepted: now() },
@@ -411,7 +426,7 @@ export const acceptIncident = onCall(async req => {
       subjectPersonId: String(data.userId || ''),
       granteeOrganisationId: context.organizationId,
       granteePersonId: context.userId,
-      granteeResponderId: unitId,
+      granteeResponderId: unit.docId,
       sourceMembershipId: context.membershipId,
       now: now(),
       incidentResolved: String(data.status || '') === 'resolved',
@@ -463,9 +478,17 @@ export const updateIncidentStatus = onCall(async req => {
   }
 
   const { ref, data } = await loadIncidentInTenant(String(incidentId), context);
-  const unitId = String(context.unitId || '');
+  const { resolveResponderUnitForContext, assignmentMatchesUnit } = await import(
+    './services/resolveResponderUnit'
+  );
+  let unit: { docId: string; unitCode: string } | null = null;
+  try {
+    unit = await resolveResponderUnitForContext(context);
+  } catch {
+    // Grant-only actors may lack a unit — leave assignments unchanged
+  }
   const assignments = ((data.assignments as Array<Record<string, unknown>>) || []).map(a =>
-    String(a.responderUnitId) === unitId
+    unit && assignmentMatchesUnit(a, unit)
       ? { ...a, status, timestamps: { ...(a.timestamps as object), [status]: now() } }
       : a
   );

@@ -3,6 +3,7 @@ import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { loadActiveShift, loadResponderProfile } from '../services/AuthService';
+import { ensurePlatformSoftShift } from '../services/ResponderService';
 import ResponderAlertDetailScreen from '../screens/responder/ResponderAlertDetailScreen';
 import ResponderAssignmentsScreen from '../screens/responder/ResponderAssignmentsScreen';
 import ResponderMapScreen from '../screens/responder/ResponderMapScreen';
@@ -22,7 +23,12 @@ export default function ResponderNavigator() {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    const [p, s] = await Promise.all([loadResponderProfile(), loadActiveShift()]);
+    const p = await loadResponderProfile();
+    let s = await loadActiveShift();
+    // Platform/Clerk unit-backed responders: soft-shift past Express PIN
+    if (p?.unitCode && !s?.active) {
+      s = await ensurePlatformSoftShift(p);
+    }
     setProfile(p);
     setShift(s);
     setLoading(false);
